@@ -176,7 +176,7 @@ Terraform variable validation rejects empty target maps, more than five targets,
 - The deploy role is limited to the AWS services and project-name prefix used by this project, including tightly scoped `iam:PassRole` access for the Lambda execution role.
 - The Lambda execution role can write its logs, read and update only its DynamoDB table, and publish only to its SNS topic.
 - The state bucket blocks all public access, enables versioning and server-side encryption, and grants access only to the local operator and GitHub roles.
-- Sensitive values and Terraform state files are excluded from Git. The alert email is declared sensitive, provided through an uncommitted variable file locally, and stored as a protected GitHub environment variable in automation.
+- Sensitive values and Terraform state files are excluded from Git. The alert email is declared sensitive, provided through an uncommitted variable file locally, and stored as an encrypted GitHub Actions repository secret. The `production` environment separately protects the apply job with required approval.
 
 ## CI/CD
 
