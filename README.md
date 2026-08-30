@@ -1,0 +1,69 @@
+# Terraform AWS URL Monitor
+
+A low-cost, serverless monitor for one to five public HTTP(S) endpoints. Terraform provisions the runtime; GitHub Actions creates a reviewed saved plan and requires production approval before applying it.
+
+## Verified behavior
+
+The acceptance run used the actual five-minute Scheduler path and demonstrated the complete state sequence:
+
+`UP` → `PENDING_DOWN` → `DOWN` → `UP`
+
+- The second failed check logged `transition=OUTAGE`.
+- A third failed scheduled check remained `DOWN`; SNS had published only one message.
+- After the reviewed restoration to `https://example.com`, the next scheduled check logged `transition=RECOVERY`.
+- SNS metrics then reported two messages published and two notifications delivered in total: one outage and one recovery.
+
+This confirms two consecutive failures are required for an outage, continued failures do not repeat normal outage notifications, and a later success produces one recovery notification.
+
+## Architecture
+
+```text
+EventBridge Scheduler (5 minutes)
+             |
+             v
+        Lambda checker ─────> DynamoDB state
+             |
+             +──────────────> SNS notifications
+             |
+             +──────────────> CloudWatch Logs and error alarm
+```
+
+The Lambda handles targets sequentially, records the current state by stable target key, and sends notifications only on state transitions. Its 30-second maximum runtime is much shorter than the five-minute schedule interval, which bounds normal scheduled overlap. It deliberately uses account unreserved concurrency so it works in low-quota accounts.
+
+## What it demonstrates
+
+- Reusable Terraform module with validated target inputs
+- Encrypted, versioned S3 Terraform state with native locking
+- GitHub OIDC roles instead of long-lived AWS keys
+- Credential-free pull-request validation
+- Saved-plan delivery with encrypted plan artifacts and production approval
+- Stateful outage suppression and recovery notifications
+- Short log retention and a monthly cost-budget notification
+
+## Setup
+
+1. Create or select the AWS account and region intended for the monitor; use a non-root administrative identity for bootstrap operations.
+2. Apply the reviewed `bootstrap/` configuration, migrate its state to the configured backend, and record its outputs only in the approved GitHub repository configuration.
+3. Set the required repository variables and secrets, including the plan-encryption public recipient. Keep the plan-encryption private identity only in the protected `production` environment.
+4. Configure the `production` environment with deployment protection and required review.
+5. Confirm the SNS email subscription after the first runtime deployment.
+6. Run `Terraform Deploy` manually with `apply`, review its saved plan, and approve the protected apply job.
+
+Do not commit an alert address, backend configuration values, state, plan files, credentials, or private key material. Local Terraform inputs belong in untracked files or environment variables.
+
+## Operate the monitor
+
+The committed demonstration target is `https://example.com` under the stable `demo` key. See [the operating runbook](docs/runbook.md) for target changes, state/log inspection, alert troubleshooting, and teardown procedures.
+
+## Cost controls
+
+The design intentionally excludes VPC networking, NAT Gateway, EC2, load balancers, database servers, public IPv4 addresses, custom metrics, and dashboards. DynamoDB is on-demand, Lambda has modest memory and a 30-second timeout, logs retain seven days, and the account has a monthly budget notification.
+
+## Repository layout
+
+- `bootstrap/` — remote state, budget, and GitHub OIDC roles
+- `infra/` — production Terraform root and target configuration
+- `modules/url-monitor/` — reusable URL-monitor Terraform module
+- `lambda/url_monitor/` — tested Python monitoring handler
+- `.github/workflows/` — validation and approved deployment workflows
+- `docs/runbook.md` — operating and teardown guidance
