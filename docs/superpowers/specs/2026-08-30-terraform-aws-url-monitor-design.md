@@ -79,7 +79,7 @@ docs/
   architecture, operating guide, incident demonstration, and cost notes
 ```
 
-`bootstrap` creates the versioned S3 state bucket, public-access blocks, server-side encryption, the GitHub OIDC provider, separate plan and deploy roles, and a USD 5 monthly AWS Budget notification. It is applied once from a non-root local AWS CLI session. After bucket creation, the bootstrap state is migrated into the same S3 backend under a separate key.
+`bootstrap` creates the versioned S3 state bucket, public-access blocks, server-side encryption, the GitHub OIDC provider, separate plan and deploy roles, and a USD 5 monthly AWS Budget notification. Its role trust subjects use GitHub's immutable owner and repository IDs as well as their names, preventing name reuse from inheriting deployment access. It is applied once from a non-root local AWS CLI session. After bucket creation, the bootstrap state is migrated into the same S3 backend under a separate key.
 
 `infra` uses the S3 backend with `use_lockfile = true`. The state bucket is intentionally independent of the monitor module so destroying the monitor cannot erase its own state storage.
 

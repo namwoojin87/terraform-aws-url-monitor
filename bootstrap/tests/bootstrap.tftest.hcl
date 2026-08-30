@@ -32,9 +32,11 @@ mock_provider "aws" {
 }
 
 variables {
-  github_owner      = "portfolio-owner"
-  github_repository = "terraform-aws-url-monitor"
-  alert_email       = "alerts@example.com"
+  github_owner         = "portfolio-owner"
+  github_owner_id      = "123456789"
+  github_repository    = "terraform-aws-url-monitor"
+  github_repository_id = "987654321"
+  alert_email          = "alerts@example.com"
 }
 
 run "plans_safe_bootstrap" {
@@ -80,12 +82,12 @@ run "keeps_bootstrap_security_contract" {
   }
 
   assert {
-    condition     = anytrue([for condition in data.aws_iam_policy_document.plan_assume.statement[0].condition : condition.variable == "token.actions.githubusercontent.com:aud" && toset(condition.values) == toset(["sts.amazonaws.com"])]) && anytrue([for condition in data.aws_iam_policy_document.plan_assume.statement[0].condition : condition.variable == "token.actions.githubusercontent.com:sub" && toset(condition.values) == toset(["repo:portfolio-owner/terraform-aws-url-monitor:ref:refs/heads/main"])])
+    condition     = anytrue([for condition in data.aws_iam_policy_document.plan_assume.statement[0].condition : condition.variable == "token.actions.githubusercontent.com:aud" && toset(condition.values) == toset(["sts.amazonaws.com"])]) && anytrue([for condition in data.aws_iam_policy_document.plan_assume.statement[0].condition : condition.variable == "token.actions.githubusercontent.com:sub" && toset(condition.values) == toset(["repo:portfolio-owner@123456789/terraform-aws-url-monitor@987654321:ref:refs/heads/main"])])
     error_message = "Plan OIDC trust must be restricted to the GitHub STS audience and main branch."
   }
 
   assert {
-    condition     = anytrue([for condition in data.aws_iam_policy_document.deploy_assume.statement[0].condition : condition.variable == "token.actions.githubusercontent.com:aud" && toset(condition.values) == toset(["sts.amazonaws.com"])]) && anytrue([for condition in data.aws_iam_policy_document.deploy_assume.statement[0].condition : condition.variable == "token.actions.githubusercontent.com:sub" && toset(condition.values) == toset(["repo:portfolio-owner/terraform-aws-url-monitor:environment:production"])])
+    condition     = anytrue([for condition in data.aws_iam_policy_document.deploy_assume.statement[0].condition : condition.variable == "token.actions.githubusercontent.com:aud" && toset(condition.values) == toset(["sts.amazonaws.com"])]) && anytrue([for condition in data.aws_iam_policy_document.deploy_assume.statement[0].condition : condition.variable == "token.actions.githubusercontent.com:sub" && toset(condition.values) == toset(["repo:portfolio-owner@123456789/terraform-aws-url-monitor@987654321:environment:production"])])
     error_message = "Deploy OIDC trust must be restricted to the GitHub STS audience and production environment."
   }
 

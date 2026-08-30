@@ -50,7 +50,7 @@
 - `modules/url-monitor/tests/module.tftest.hcl` — mocked-provider module plans and assertions.
 - `bootstrap/backend.tf` — partial S3 backend block for post-bootstrap state migration.
 - `bootstrap/versions.tf` — bootstrap provider constraints.
-- `bootstrap/variables.tf` — GitHub owner, repository, email, region, and naming inputs.
+- `bootstrap/variables.tf` — GitHub owner/repository names and immutable IDs, email, region, and naming inputs.
 - `bootstrap/main.tf` — state bucket, encryption, versioning, public access block, and budget.
 - `bootstrap/oidc.tf` — GitHub OIDC provider, plan role, deploy role, and their policies.
 - `bootstrap/outputs.tf` — state bucket, AWS account, and GitHub role ARNs.
@@ -1375,7 +1375,7 @@ Expected: the module is reviewable without bootstrap or a live AWS account.
 - Create: `bootstrap/tests/bootstrap.tftest.hcl`
 
 **Interfaces:**
-- Consumes: `github_owner`, fixed repository name `terraform-aws-url-monitor`, and `alert_email`.
+- Consumes: GitHub owner/repository names and immutable IDs, fixed repository name `terraform-aws-url-monitor`, and `alert_email`.
 - Produces: `state_bucket_name`, `aws_account_id`, `plan_role_arn`, and `deploy_role_arn`.
 
 - [ ] **Step 1: Ensure the portfolio repository identity exists**
@@ -1408,9 +1408,11 @@ mock_provider "aws" {
 }
 
 variables {
-  github_owner      = "portfolio-owner"
-  github_repository = "terraform-aws-url-monitor"
-  alert_email       = "alerts@example.com"
+  github_owner         = "portfolio-owner"
+  github_owner_id      = "123456789"
+  github_repository    = "terraform-aws-url-monitor"
+  github_repository_id = "987654321"
+  alert_email          = "alerts@example.com"
 }
 
 run "plans_safe_bootstrap" {
@@ -1483,10 +1485,20 @@ variable "github_owner" {
   type        = string
 }
 
+variable "github_owner_id" {
+  description = "Immutable numeric GitHub account ID used in OIDC subjects."
+  type        = string
+}
+
 variable "github_repository" {
   description = "GitHub repository trusted by AWS."
   type        = string
   default     = "terraform-aws-url-monitor"
+}
+
+variable "github_repository_id" {
+  description = "Immutable numeric GitHub repository ID used in OIDC subjects."
+  type        = string
 }
 
 variable "alert_email" {
@@ -1622,7 +1634,7 @@ data "aws_iam_policy_document" "plan_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_owner}/${var.github_repository}:ref:refs/heads/main"]
+      values   = ["repo:${var.github_owner}@${var.github_owner_id}/${var.github_repository}@${var.github_repository_id}:ref:refs/heads/main"]
     }
   }
 }
@@ -1642,7 +1654,7 @@ data "aws_iam_policy_document" "deploy_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_owner}/${var.github_repository}:environment:production"]
+      values   = ["repo:${var.github_owner}@${var.github_owner_id}/${var.github_repository}@${var.github_repository_id}:environment:production"]
     }
   }
 }
@@ -1871,7 +1883,13 @@ Run these identity checks first:
 ```powershell
 aws sts get-caller-identity
 $projectOwner = gh api user --jq .login
+$projectOwnerId = gh api user --jq .id
+$projectRepository = "terraform-aws-url-monitor"
+$projectRepositoryId = gh api "repos/$projectOwner/$projectRepository" --jq .id
 $env:TF_VAR_github_owner = $projectOwner
+$env:TF_VAR_github_owner_id = $projectOwnerId
+$env:TF_VAR_github_repository = $projectRepository
+$env:TF_VAR_github_repository_id = $projectRepositoryId
 $env:TF_VAR_alert_email = Read-Host 'Email for AWS budget and monitor alerts'
 terraform -chdir=bootstrap plan -out=bootstrap.tfplan
 terraform -chdir=bootstrap apply bootstrap.tfplan
