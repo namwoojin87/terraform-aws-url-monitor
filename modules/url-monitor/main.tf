@@ -65,6 +65,8 @@ resource "aws_scheduler_schedule" "monitor" {
   name       = "${var.project_name}-checks"
   group_name = aws_scheduler_schedule_group.monitor.name
 
+  depends_on = [aws_iam_role_policy.scheduler]
+
   flexible_time_window {
     mode = "OFF"
   }
