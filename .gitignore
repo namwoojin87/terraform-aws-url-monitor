@@ -10,6 +10,7 @@ __pycache__/
 *.tfstate.*
 *.tfplan
 *.zip
+*.tfvars
 terraform.tfvars
 backend.hcl
 crash.log
