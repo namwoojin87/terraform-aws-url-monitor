@@ -1,3 +1,10 @@
+locals {
+  github_role_arns = [
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-github-plan",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-github-deploy",
+  ]
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
@@ -213,7 +220,7 @@ data "aws_iam_policy_document" "github_state_boundary" {
     effect = "Deny"
     principals {
       type        = "AWS"
-      identifiers = [aws_iam_role.plan.arn, aws_iam_role.deploy.arn]
+      identifiers = local.github_role_arns
     }
     actions = [
       "s3:GetObject",
@@ -229,7 +236,7 @@ data "aws_iam_policy_document" "github_state_boundary" {
     effect = "Deny"
     principals {
       type        = "AWS"
-      identifiers = [aws_iam_role.plan.arn, aws_iam_role.deploy.arn]
+      identifiers = local.github_role_arns
     }
     actions   = ["s3:ListBucket", "s3:ListBucketVersions"]
     resources = [aws_s3_bucket.state.arn]
@@ -245,7 +252,7 @@ data "aws_iam_policy_document" "github_state_boundary" {
     effect = "Deny"
     principals {
       type        = "AWS"
-      identifiers = [aws_iam_role.plan.arn, aws_iam_role.deploy.arn]
+      identifiers = local.github_role_arns
     }
     actions   = ["s3:ListBucket", "s3:ListBucketVersions"]
     resources = [aws_s3_bucket.state.arn]
@@ -258,6 +265,7 @@ data "aws_iam_policy_document" "github_state_boundary" {
 }
 
 resource "aws_s3_bucket_policy" "state" {
-  bucket = aws_s3_bucket.state.id
-  policy = data.aws_iam_policy_document.github_state_boundary.json
+  bucket     = aws_s3_bucket.state.id
+  policy     = data.aws_iam_policy_document.github_state_boundary.json
+  depends_on = [aws_iam_role.plan, aws_iam_role.deploy]
 }
