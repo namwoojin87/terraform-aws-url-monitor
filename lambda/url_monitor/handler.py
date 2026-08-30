@@ -20,13 +20,13 @@ def run(event, repository, notifier, checker, now):
     checked_at = now.isoformat()
 
     for name, config in event["targets"].items():
-        target = Target(
-            name=name,
-            url=config["url"],
-            expected_statuses=frozenset(config["expected_statuses"]),
-            timeout_seconds=int(config["timeout_seconds"]),
-        )
         try:
+            target = Target(
+                name=name,
+                url=config["url"],
+                expected_statuses=frozenset(config["expected_statuses"]),
+                timeout_seconds=int(config["timeout_seconds"]),
+            )
             current = repository.get(name)
             result = checker(target)
             decision = decide_state(current, result, threshold, checked_at, expires_at)

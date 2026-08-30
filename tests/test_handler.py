@@ -87,6 +87,23 @@ def test_one_internal_error_does_not_skip_remaining_target():
     assert repository.states["healthy"].status == "UP"
 
 
+def test_malformed_target_does_not_skip_remaining_target():
+    event = {
+        **EVENT,
+        "targets": {
+            "malformed": {"expected_statuses": [200], "timeout_seconds": 5},
+            "healthy": EVENT["targets"]["demo"],
+        },
+    }
+    repository = MemoryRepository()
+    notifier = MemoryNotifier()
+
+    with pytest.raises(RuntimeError, match="malformed"):
+        run(event, repository, notifier, lambda _target: CheckResult(True, 200, 20, None, None), NOW)
+
+    assert repository.states["healthy"].status == "UP"
+
+
 def test_notification_failure_does_not_commit_transition():
     repository = MemoryRepository(
         {"demo": StoredState("PENDING_DOWN", 1, NOW.isoformat(), NOW.isoformat(), None, "DNS", 0)}
