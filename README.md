@@ -46,7 +46,17 @@ The Lambda handles targets sequentially, records the current state by stable tar
 1. Create or select the AWS account intended for the monitor in `ap-northeast-2` (Seoul); use a non-root administrative identity for bootstrap operations.
 2. Apply the reviewed `bootstrap/` configuration, migrate its state to the configured backend, and record its outputs only in the approved GitHub repository configuration.
 3. Set these GitHub repository variables from the reviewed bootstrap outputs: `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`, and `AWS_DEPLOY_ROLE_ARN`.
-4. Generate an age key pair locally in a protected directory outside the repository, using a command such as `age-keygen -o /secure/local/path/tf-plan-age-identity.txt`. Do not print, copy, or pass the private identity through the shell, command history, or Git. Register only its public recipient as the `TF_PLAN_AGE_RECIPIENT` repository variable; store the matching private identity only as the `TF_PLAN_AGE_IDENTITY` secret in the protected `production` environment.
+4. Generate an age key pair locally in a new, protected directory outside the repository. The following PowerShell example uses a task-specific directory under `LOCALAPPDATA` and fails rather than replacing an existing directory or identity file:
+
+   ```powershell
+   $keyDirectory = Join-Path $env:LOCALAPPDATA 'url-monitor\age'
+   New-Item -ItemType Directory -Path $keyDirectory -ErrorAction Stop | Out-Null
+   $identityFile = Join-Path $keyDirectory 'tf-plan-age-identity.txt'
+   age-keygen -o $identityFile
+   age-keygen -y $identityFile
+   ```
+
+   Copy only the public recipient printed by the final command into the `TF_PLAN_AGE_RECIPIENT` repository variable. Transfer the matching private identity directly through a controlled secret-entry process to `TF_PLAN_AGE_IDENTITY` in the protected `production` environment. Never print, log, commit, or route the private identity through shell history.
 5. Keep a secure, access-controlled backup of the private identity outside the repository. For rotation, do not leave an in-flight saved plan: coordinate the new repository variable and production secret, verify a new deployment, allow the prior one-day plan artifacts to expire, then remove temporary local copies and any superseded backup according to the key-retention policy.
 6. Set `ALERT_EMAIL` as a GitHub repository secret.
 7. Configure the `production` environment with deployment protection and required review.
