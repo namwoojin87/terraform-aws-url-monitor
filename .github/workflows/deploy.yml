@@ -1,0 +1,91 @@
+name: Terraform Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Terraform operation
+        required: true
+        default: apply
+        type: choice
+        options: [apply, destroy]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+  AWS_REGION: ap-northeast-2
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: 1.16.0
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: url-monitor-plan
+      - name: Initialize backend
+        run: >-
+          terraform -chdir=infra init -input=false
+          -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          -backend-config="key=infra/terraform.tfstate"
+          -backend-config="region=${{ env.AWS_REGION }}"
+          -backend-config="encrypt=true"
+          -backend-config="use_lockfile=true"
+      - name: Create saved plan
+        shell: bash
+        run: |
+          if [[ "${{ inputs.operation }}" == "destroy" ]]; then
+            terraform -chdir=infra plan -destroy -input=false -out=tfplan
+          else
+            terraform -chdir=infra plan -input=false -out=tfplan
+          fi
+          terraform -chdir=infra show -no-color tfplan > infra/plan.txt
+          cat infra/plan.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: terraform-plan
+          path: |
+            infra/tfplan
+            infra/plan.txt
+          retention-days: 1
+          if-no-files-found: error
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: actions/download-artifact@v8
+        with:
+          name: terraform-plan
+          path: infra
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: 1.16.0
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: url-monitor-deploy
+      - name: Initialize backend
+        run: >-
+          terraform -chdir=infra init -input=false
+          -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          -backend-config="key=infra/terraform.tfstate"
+          -backend-config="region=${{ env.AWS_REGION }}"
+          -backend-config="encrypt=true"
+          -backend-config="use_lockfile=true"
+      - name: Apply reviewed plan
+        run: terraform -chdir=infra apply -input=false tfplan
