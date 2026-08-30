@@ -6,8 +6,13 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 data "aws_iam_policy_document" "state_access" {
   statement {
-    actions   = ["s3:ListBucket"]
+    actions   = ["s3:ListBucket", "s3:ListBucketVersions"]
     resources = [aws_s3_bucket.state.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["infra/*"]
+    }
   }
   statement {
     actions = ["s3:GetObject", "s3:PutObject"]
@@ -220,18 +225,34 @@ data "aws_iam_policy_document" "github_state_boundary" {
   }
 
   statement {
-    sid    = "DenyGitHubBootstrapStateListing"
+    sid    = "DenyGitHubStateListingWithoutPrefix"
     effect = "Deny"
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.plan.arn, aws_iam_role.deploy.arn]
     }
-    actions   = ["s3:ListBucket"]
+    actions   = ["s3:ListBucket", "s3:ListBucketVersions"]
     resources = [aws_s3_bucket.state.arn]
     condition {
-      test     = "StringLike"
+      test     = "Null"
       variable = "s3:prefix"
-      values   = ["bootstrap/*"]
+      values   = ["true"]
+    }
+  }
+
+  statement {
+    sid    = "DenyGitHubNonInfraStateListing"
+    effect = "Deny"
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.plan.arn, aws_iam_role.deploy.arn]
+    }
+    actions   = ["s3:ListBucket", "s3:ListBucketVersions"]
+    resources = [aws_s3_bucket.state.arn]
+    condition {
+      test     = "StringNotLike"
+      variable = "s3:prefix"
+      values   = ["infra/*"]
     }
   }
 }
