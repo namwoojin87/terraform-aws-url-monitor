@@ -38,16 +38,18 @@ The Lambda handles targets sequentially, records the current state by stable tar
 - Credential-free pull-request validation
 - Saved-plan delivery with encrypted plan artifacts and production approval
 - Stateful outage suppression and recovery notifications
+- Least-privilege runtime IAM for the Lambda and Scheduler components
 - Short log retention and a monthly cost-budget notification
 
 ## Setup
 
-1. Create or select the AWS account and region intended for the monitor; use a non-root administrative identity for bootstrap operations.
+1. Create or select the AWS account intended for the monitor in `ap-northeast-2` (Seoul); use a non-root administrative identity for bootstrap operations.
 2. Apply the reviewed `bootstrap/` configuration, migrate its state to the configured backend, and record its outputs only in the approved GitHub repository configuration.
-3. Set the required repository variables and secrets, including the plan-encryption public recipient. Keep the plan-encryption private identity only in the protected `production` environment.
-4. Configure the `production` environment with deployment protection and required review.
-5. Confirm the SNS email subscription after the first runtime deployment.
-6. Run `Terraform Deploy` manually with `apply`, review its saved plan, and approve the protected apply job.
+3. Set these GitHub repository variables from the reviewed bootstrap outputs: `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`, and `TF_PLAN_AGE_RECIPIENT`.
+4. Set `ALERT_EMAIL` as a GitHub repository secret. Set `TF_PLAN_AGE_IDENTITY` only as a secret in the protected `production` environment; it decrypts the saved plan only after approval.
+5. Configure the `production` environment with deployment protection and required review.
+6. Confirm the SNS email subscription after the first runtime deployment.
+7. Run `Terraform Deploy` manually with `apply`, review its saved plan, and approve the protected apply job.
 
 Do not commit an alert address, backend configuration values, state, plan files, credentials, or private key material. Local Terraform inputs belong in untracked files or environment variables.
 
@@ -57,7 +59,7 @@ The committed demonstration target is `https://example.com` under the stable `de
 
 ## Cost controls
 
-The design intentionally excludes VPC networking, NAT Gateway, EC2, load balancers, database servers, public IPv4 addresses, custom metrics, and dashboards. DynamoDB is on-demand, Lambda has modest memory and a 30-second timeout, logs retain seven days, and the account has a monthly budget notification.
+The design intentionally excludes VPC networking, NAT Gateway, EC2, load balancers, database servers, public IPv4 addresses, custom metrics, and dashboards. DynamoDB is on-demand, Lambda has modest memory and a 30-second timeout, logs retain seven days, and the account has a verified USD 5 monthly budget notification.
 
 ## Repository layout
 

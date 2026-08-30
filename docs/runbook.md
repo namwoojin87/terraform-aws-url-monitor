@@ -38,7 +38,7 @@ The SNS email subscription is incomplete until its confirmation link has been ac
 
 ```powershell
 $topicArn = terraform -chdir=infra output -raw sns_topic_arn
-aws sns list-subscriptions-by-topic --topic-arn $topicArn
+aws sns list-subscriptions-by-topic --region ap-northeast-2 --topic-arn $topicArn
 ```
 
 The subscription must not remain `PendingConfirmation`. CloudWatch/SNS metrics should reflect one publish for a normal outage transition and one additional publish for its recovery.
@@ -77,7 +77,7 @@ For an incident demonstration, `https://monitor-demo.invalid` is a safe reserved
 1. Confirm the workflow ran from `main` for planning and uses the protected `production` environment for apply.
 2. Confirm the repository’s immutable owner and repository IDs are supplied to the bootstrap trust configuration.
 3. Confirm the GitHub OIDC provider audience and the plan/deploy role references remain configured through approved repository settings.
-4. Apply any trust-policy repair through the reviewed bootstrap workflow, then retry with a new saved plan.
+4. Repair the trust policy with a reviewed local `bootstrap/` Terraform plan and apply from an MFA-protected, non-root administrative session. This recovery path is necessary because a broken GitHub OIDC trust cannot repair itself. Then retry the runtime deployment with a new saved plan.
 
 ### Lambda concurrency configuration fails
 
