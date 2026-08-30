@@ -16,18 +16,17 @@ permissions:
 
 env:
   TF_IN_AUTOMATION: "true"
-  TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
   AWS_REGION: ap-northeast-2
 
 jobs:
   plan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.2
-      - uses: hashicorp/setup-terraform@v4.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.16.0
-      - uses: aws-actions/configure-aws-credentials@v6.2.3
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -41,8 +40,14 @@ jobs:
           -backend-config="region=${{ env.AWS_REGION }}"
           -backend-config="encrypt=true"
           -backend-config="use_lockfile=true"
+      - name: Install age
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes age
       - name: Create saved plan
         shell: bash
+        env:
+          TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
         run: |
           if [[ "${{ inputs.operation }}" == "destroy" ]]; then
             terraform -chdir=infra plan -destroy -input=false -out=tfplan
@@ -51,12 +56,18 @@ jobs:
           fi
           terraform -chdir=infra show -no-color tfplan > infra/plan.txt
           cat infra/plan.txt >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v7.0.1
+      - name: Encrypt saved plan
+        shell: bash
+        run: |
+          age --encrypt -r "${{ vars.TF_PLAN_AGE_RECIPIENT }}" -o infra/tfplan.age infra/tfplan
+          rm -f infra/tfplan
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: terraform-plan
           path: |
-            infra/tfplan
+            infra/tfplan.age
             infra/plan.txt
+            infra/url-monitor.zip
           retention-days: 1
           if-no-files-found: error
 
@@ -65,15 +76,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v6.0.2
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: terraform-plan
           path: infra
-      - uses: hashicorp/setup-terraform@v4.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.16.0
-      - uses: aws-actions/configure-aws-credentials@v6.2.3
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -87,5 +98,15 @@ jobs:
           -backend-config="region=${{ env.AWS_REGION }}"
           -backend-config="encrypt=true"
           -backend-config="use_lockfile=true"
-      - name: Apply reviewed plan
-        run: terraform -chdir=infra apply -input=false tfplan
+      - name: Install age
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes age
+      - name: Decrypt and apply reviewed plan
+        shell: bash
+        env:
+          TF_PLAN_AGE_IDENTITY: ${{ secrets.TF_PLAN_AGE_IDENTITY }}
+        run: |
+          trap 'rm -f infra/tfplan' EXIT
+          age --decrypt -i <(printf '%s\n' "$TF_PLAN_AGE_IDENTITY") -o infra/tfplan infra/tfplan.age
+          terraform -chdir=infra apply -input=false tfplan
