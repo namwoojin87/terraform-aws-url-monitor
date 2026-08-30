@@ -112,7 +112,7 @@ One schedule invokes the Lambda function every five minutes. The schedule passes
 
 The Python handler uses the standard library HTTP client so the deployment package has no runtime dependencies. It checks targets sequentially and isolates each target in its own exception boundary, ensuring one bad endpoint does not stop the remaining checks.
 
-The function timeout is 30 seconds, which covers five targets with per-request timeouts capped at five seconds. Reserved concurrency is one because overlapping monitor executions are unnecessary. Logs include monitor name, result, response code or error category, elapsed milliseconds, and transition outcome. Logs never include AWS credentials or Terraform state.
+The function timeout is 30 seconds, which covers five targets with per-request timeouts capped at five seconds. It uses account unreserved concurrency rather than a per-function reservation, avoiding an unsupported reservation on low-quota accounts. The 30-second maximum runtime is much shorter than the five-minute schedule interval, which operationally bounds overlap for normal scheduled runs. Logs include monitor name, result, response code or error category, elapsed milliseconds, and transition outcome. Logs never include AWS credentials or Terraform state.
 
 ### DynamoDB
 
@@ -162,7 +162,7 @@ The handler classifies failures as HTTP status mismatch, DNS resolution failure,
 
 For a state transition, the function publishes the SNS message before committing the new state. If publishing fails, the old state remains and the transition is retried. If publishing succeeds but the subsequent DynamoDB write fails, a retry can produce a duplicate email; delivery is therefore at-least-once during infrastructure failures. Normal scheduled checks do not repeat alerts after a successful state update.
 
-Target processing continues after an internal error so the remaining endpoints are still checked. After all targets finish, any collected internal error causes the invocation to fail, incrementing the Lambda `Errors` metric and triggering the CloudWatch alarm. The reserved concurrency and five-minute interval prevent overlapping normal executions.
+Target processing continues after an internal error so the remaining endpoints are still checked. After all targets finish, any collected internal error causes the invocation to fail, incrementing the Lambda `Errors` metric and triggering the CloudWatch alarm. No per-function reservation is configured; the 30-second maximum runtime remains much shorter than the five-minute schedule interval, operationally bounding normal scheduled overlap.
 
 Terraform variable validation rejects empty target maps, more than five targets, non-HTTP(S) URLs, empty expected-status sets, and request timeouts outside the supported range.
 

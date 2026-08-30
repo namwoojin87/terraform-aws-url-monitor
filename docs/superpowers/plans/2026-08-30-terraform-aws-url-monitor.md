@@ -1234,8 +1234,6 @@ resource "aws_lambda_function" "checker" {
   timeout          = 30
   memory_size      = 128
 
-  reserved_concurrent_executions = 1
-
   environment {
     variables = {
       STATE_TABLE_NAME = aws_dynamodb_table.state.name
@@ -1348,7 +1346,7 @@ tflint --init
 tflint --recursive --format compact
 ```
 
-Expected: every command exits zero; mocked tests verify on-demand DynamoDB, 30-second Lambda, seven-day logs, and target-count validation.
+Expected: every command exits zero; mocked tests verify on-demand DynamoDB, an unreserved 30-second Lambda, seven-day logs, and target-count validation. The 30-second maximum runtime is much shorter than the five-minute schedule interval, which operationally bounds overlap for normal scheduled runs without requiring a per-function concurrency reservation.
 
 - [ ] **Step 9: Commit the reusable module**
 

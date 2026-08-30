@@ -43,8 +43,6 @@ resource "aws_lambda_function" "checker" {
   timeout          = 30
   memory_size      = 128
 
-  reserved_concurrent_executions = 1
-
   environment {
     variables = {
       STATE_TABLE_NAME = aws_dynamodb_table.state.name

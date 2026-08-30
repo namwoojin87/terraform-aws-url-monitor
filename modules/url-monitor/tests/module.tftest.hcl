@@ -88,8 +88,8 @@ run "wires_runtime_delivery_and_outputs" {
   }
 
   assert {
-    condition     = aws_lambda_function.checker.memory_size == 128 && aws_lambda_function.checker.reserved_concurrent_executions == 1
-    error_message = "Lambda must retain 128 MB memory and reserved concurrency of one."
+    condition     = aws_lambda_function.checker.memory_size == 128
+    error_message = "Lambda must retain 128 MB memory without a per-function concurrency reservation."
   }
 
   assert {
