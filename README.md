@@ -45,11 +45,13 @@ The Lambda handles targets sequentially, records the current state by stable tar
 
 1. Create or select the AWS account intended for the monitor in `ap-northeast-2` (Seoul); use a non-root administrative identity for bootstrap operations.
 2. Apply the reviewed `bootstrap/` configuration, migrate its state to the configured backend, and record its outputs only in the approved GitHub repository configuration.
-3. Set these GitHub repository variables from the reviewed bootstrap outputs: `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`, and `TF_PLAN_AGE_RECIPIENT`.
-4. Set `ALERT_EMAIL` as a GitHub repository secret. Set `TF_PLAN_AGE_IDENTITY` only as a secret in the protected `production` environment; it decrypts the saved plan only after approval.
-5. Configure the `production` environment with deployment protection and required review.
-6. Confirm the SNS email subscription after the first runtime deployment.
-7. Run `Terraform Deploy` manually with `apply`, review its saved plan, and approve the protected apply job.
+3. Set these GitHub repository variables from the reviewed bootstrap outputs: `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`, and `AWS_DEPLOY_ROLE_ARN`.
+4. Generate an age key pair locally in a protected directory outside the repository, using a command such as `age-keygen -o /secure/local/path/tf-plan-age-identity.txt`. Do not print, copy, or pass the private identity through the shell, command history, or Git. Register only its public recipient as the `TF_PLAN_AGE_RECIPIENT` repository variable; store the matching private identity only as the `TF_PLAN_AGE_IDENTITY` secret in the protected `production` environment.
+5. Keep a secure, access-controlled backup of the private identity outside the repository. For rotation, do not leave an in-flight saved plan: coordinate the new repository variable and production secret, verify a new deployment, allow the prior one-day plan artifacts to expire, then remove temporary local copies and any superseded backup according to the key-retention policy.
+6. Set `ALERT_EMAIL` as a GitHub repository secret.
+7. Configure the `production` environment with deployment protection and required review.
+8. Confirm the SNS email subscription after the first runtime deployment.
+9. Run `Terraform Deploy` manually with `apply`, review its saved plan, and approve the protected apply job.
 
 Do not commit an alert address, backend configuration values, state, plan files, credentials, or private key material. Local Terraform inputs belong in untracked files or environment variables.
 
