@@ -1,7 +1,9 @@
 locals {
+  github_plan_role_name   = "${var.project_name}-github-plan"
+  github_deploy_role_name = "${var.project_name}-github-deploy"
   github_role_arns = [
-    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-github-plan",
-    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-github-deploy",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.github_plan_role_name}",
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.github_deploy_role_name}",
   ]
 }
 
@@ -81,7 +83,7 @@ data "aws_iam_policy_document" "deploy_assume" {
 }
 
 resource "aws_iam_role" "plan" {
-  name               = "${var.project_name}-github-plan"
+  name               = local.github_plan_role_name
   assume_role_policy = data.aws_iam_policy_document.plan_assume.json
 }
 
@@ -96,7 +98,7 @@ resource "aws_iam_role_policy_attachment" "plan_state" {
 }
 
 resource "aws_iam_role" "deploy" {
-  name               = "${var.project_name}-github-deploy"
+  name               = local.github_deploy_role_name
   assume_role_policy = data.aws_iam_policy_document.deploy_assume.json
 }
 

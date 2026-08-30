@@ -18,8 +18,12 @@ def test_state_bucket_policy_uses_known_role_arns_and_waits_for_role_creation():
         re.DOTALL,
     )
 
-    assert '"arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-github-plan"' in source
-    assert '"arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-github-deploy"' in source
+    assert 'github_plan_role_name   = "${var.project_name}-github-plan"' in source
+    assert 'github_deploy_role_name = "${var.project_name}-github-deploy"' in source
+    assert '"arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.github_plan_role_name}"' in source
+    assert '"arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.github_deploy_role_name}"' in source
+    assert re.search(r'resource "aws_iam_role" "plan" \{\s+name\s+= local\.github_plan_role_name', source)
+    assert re.search(r'resource "aws_iam_role" "deploy" \{\s+name\s+= local\.github_deploy_role_name', source)
     assert boundary is not None
     assert "identifiers = local.github_role_arns" in boundary.group("body")
     assert "aws_iam_role.plan.arn" not in boundary.group("body")
