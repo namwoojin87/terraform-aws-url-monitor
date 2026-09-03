@@ -23,6 +23,15 @@ The valid statuses are:
 - `PENDING_DOWN` — one failure has been recorded; no outage notification is sent yet.
 - `DOWN` — the configured failure threshold was reached; one outage notification has been sent for the transition.
 
+## Inspect recent check history
+
+Read the history table name and query only the stable monitor partition. This returns at most 20 newest records and avoids a table scan.
+
+    $historyTable = terraform -chdir=infra output -raw history_table_name
+    aws dynamodb query --region ap-northeast-2 --table-name $historyTable --key-condition-expression "monitor_id = :monitor" --expression-attribute-values '{":monitor":{"S":"demo"}}' --no-scan-index-forward --limit 20
+
+History expiration uses DynamoDB TTL. Items become eligible for deletion after seven days, but deletion is asynchronous.
+
 ### Inspect recent execution
 
 ```powershell
@@ -71,15 +80,6 @@ For an incident demonstration, `https://monitor-demo.invalid` is a safe reserved
 3. Inspect the Lambda error alarm and its delivery path.
 4. Check the DynamoDB item before changing configuration; a persisted `DOWN` state intentionally suppresses additional normal outage notifications.
 5. If deployment drift is suspected, create and review a new approved plan rather than applying local changes directly.
-
-## Inspect recent check history
-
-Read the history table name and query only the stable monitor partition. This returns at most 20 newest records and avoids a table scan.
-
-    $historyTable = terraform -chdir=infra output -raw history_table_name
-    aws dynamodb query --region ap-northeast-2 --table-name $historyTable --key-condition-expression "monitor_id = :monitor" --expression-attribute-values '{":monitor":{"S":"demo"}}' --no-scan-index-forward --limit 20
-
-History expiration uses DynamoDB TTL. Items become eligible for deletion after seven days, but deletion is asynchronous.
 
 ### A deployment cannot assume its AWS role
 
