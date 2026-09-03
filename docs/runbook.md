@@ -23,7 +23,7 @@ The valid statuses are:
 - `PENDING_DOWN` — one failure has been recorded; no outage notification is sent yet.
 - `DOWN` — the configured failure threshold was reached; one outage notification has been sent for the transition.
 
-## Inspect recent check history
+### Inspect recent check history
 
 Read the history table name and query only the stable monitor partition. This returns at most 20 newest records and avoids a table scan.
 
