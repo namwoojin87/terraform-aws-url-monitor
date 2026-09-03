@@ -10,6 +10,9 @@ module "url_monitor" {
   }
 
   schedule_expression = "rate(5 minutes)"
-  failure_threshold   = 2
-  log_retention_days  = 7
+
+  schedule_enabled = var.schedule_enabled
+
+  failure_threshold  = 2
+  log_retention_days = 7
 }

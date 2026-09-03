@@ -21,7 +21,9 @@ This confirms two consecutive failures are required for an outage, continued fai
 EventBridge Scheduler (5 minutes)
              |
              v
-        Lambda checker ─────> DynamoDB state
+        Lambda checker ─────> DynamoDB current state
+             |
+             +──────────────> DynamoDB 7-day check history
              |
              +──────────────> SNS notifications
              |
@@ -35,6 +37,7 @@ The Lambda handles targets sequentially, records the current state by stable tar
 - Reusable Terraform module with validated target inputs
 - Encrypted, versioned S3 Terraform state with native locking
 - GitHub OIDC roles instead of long-lived AWS keys
+- Queryable per-target check history with automatic seven-day expiry
 - Credential-free pull-request validation
 - Saved-plan delivery with encrypted plan artifacts and production approval
 - Stateful outage suppression and recovery notifications
@@ -69,9 +72,11 @@ Do not commit an alert address, backend configuration values, state, plan files,
 
 The committed demonstration target is `https://example.com` under the stable `demo` key. See [the operating runbook](docs/runbook.md) for target changes, state/log inspection, alert troubleshooting, and teardown procedures.
 
+`infra/monitor.auto.tfvars.json` keeps `schedule_enabled` set to `false`. Scheduled checks remain paused until a reviewed pull request deliberately changes it to `true` and the approved Terraform deployment applies that change.
+
 ## Cost controls
 
-The design intentionally excludes VPC networking, NAT Gateway, EC2, load balancers, database servers, public IPv4 addresses, custom metrics, and dashboards. DynamoDB is on-demand, Lambda has modest memory and a 30-second timeout, logs retain seven days, and the account has a verified USD 5 monthly budget notification.
+The design intentionally excludes VPC networking, NAT Gateway, EC2, load balancers, database servers, public IPv4 addresses, custom metrics, and dashboards. DynamoDB is on-demand: the state table remains tiny, and each enabled target writes 288 small history items per day that become eligible for automatic deletion after seven days.
 
 ## Repository layout
 

@@ -27,6 +27,30 @@ resource "aws_dynamodb_table" "state" {
   tags = var.tags
 }
 
+resource "aws_dynamodb_table" "history" {
+  name         = "${var.project_name}-history"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "monitor_id"
+  range_key    = "checked_at"
+
+  attribute {
+    name = "monitor_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "checked_at"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  tags = var.tags
+}
+
 resource "aws_cloudwatch_log_group" "checker" {
   name              = "/aws/lambda/${var.project_name}-checker"
   retention_in_days = var.log_retention_days
@@ -45,8 +69,9 @@ resource "aws_lambda_function" "checker" {
 
   environment {
     variables = {
-      STATE_TABLE_NAME = aws_dynamodb_table.state.name
-      ALERT_TOPIC_ARN  = aws_sns_topic.alerts.arn
+      STATE_TABLE_NAME   = aws_dynamodb_table.state.name
+      HISTORY_TABLE_NAME = aws_dynamodb_table.history.name
+      ALERT_TOPIC_ARN    = aws_sns_topic.alerts.arn
     }
   }
 
@@ -62,6 +87,7 @@ resource "aws_scheduler_schedule_group" "monitor" {
 resource "aws_scheduler_schedule" "monitor" {
   name       = "${var.project_name}-checks"
   group_name = aws_scheduler_schedule_group.monitor.name
+  state      = var.schedule_enabled ? "ENABLED" : "DISABLED"
 
   depends_on = [aws_iam_role_policy.scheduler]
 
@@ -77,6 +103,7 @@ resource "aws_scheduler_schedule" "monitor" {
     input = jsonencode({
       failure_threshold = var.failure_threshold
       state_ttl_days    = 7
+      history_ttl_days  = 7
       targets = {
         for name, target in var.monitor_targets : name => {
           url               = target.url
