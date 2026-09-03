@@ -8,6 +8,11 @@ output "state_table_name" {
   value       = aws_dynamodb_table.state.name
 }
 
+output "history_table_name" {
+  description = "DynamoDB table holding seven-day check history."
+  value       = aws_dynamodb_table.history.name
+}
+
 output "sns_topic_arn" {
   description = "SNS topic used for monitor notifications."
   value       = aws_sns_topic.alerts.arn
