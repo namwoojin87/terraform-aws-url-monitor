@@ -1,6 +1,6 @@
 # Terraform security review
 
-The new `Terraform Security` workflow is configured to run a full Terraform scan on pull requests, pushes to `main`, and manual dispatch. Its code is locally verified but has not yet been published or executed on GitHub. The local full scan currently fails because 18 findings below remain unresolved. Adding the scanner does not approve a risk exception or make this deployment compliant with a security standard.
+The new `Terraform Security` workflow is configured to run a full Terraform scan on pull requests, pushes to `main`, and manual dispatch. It is published in draft PR #8 and its [first actual GitHub run](https://github.com/namwoojin87/terraform-aws-url-monitor/actions/runs/34091253763) failed with 154 passed / 18 failed / 0 skipped checks, while summary publication and evidence upload succeeded. The final local rerun matches those counts. Adding the scanner does not approve a risk exception or make this deployment compliant with a security standard. See [the dated execution record](final-verification.md) for commit scope and remaining work.
 
 ## Evidence and scope
 
@@ -18,6 +18,8 @@ Checkov **3.3.16**, Python **3.12**, local verification on **2026-09-07**:
 
 The five fixture tests execute the actual scanner through the same gate used in CI. They first failed before the runner existed. The malformed and empty cases matter because Checkov's native zero exit code is insufficient evidence of a complete scan. The repository counts are a dated working-tree snapshot; each CI artifact records that run's current counts.
 
+Six additional regression cases exercise missing finding fields, wrong finding types, and null paths for scanner exit codes 0 and 1. These mock only the external scanner boundary: the real gate must retain raw evidence, write ERROR, return 2, and never announce PASSED. Tests were observed failing before their fixes, then all six passed; the final complete local suite passed 70 tests without skips. Verdict selection now occurs after evidence rendering, and handled report errors explicitly select exit 2.
+
 The scanner reads all Terraform under the repository, resolves its local module, and uses its complete bundled Terraform ruleset. Checkov's default exclusions cover hidden directories and `.terraform`; there is no check allowlist, severity filter, baseline, or suppression list. External module downloads and Prisma Cloud downloads/uploads are disabled. Future external modules will require an explicit coverage decision because they are not downloaded. This source scan does not inspect live AWS state, test runtime permissions, perform dependency or secret scanning, or prove alert delivery.
 
 The job requests only `contents: read`, does not obtain AWS credentials or an OIDC token, and does not run Terraform apply. The scanner and pytest versions are pinned in `requirements-security.txt`; transitive Python dependencies remain subject to those packages' version constraints. Action references are immutable full commit SHAs verified against upstream release tags on the review date. This uses open-source Checkov and standard GitHub Actions execution/artifact storage; no paid security service is enabled.
@@ -26,7 +28,7 @@ Every completed scan writes `security/reports/checkov.json` (original scanner ou
 
 ## Locally remediated bootstrap findings
 
-The following changes are present only in the local working tree and **have not been applied to AWS**. Prior IAM-apply evidence does not prove these new settings are active. The latest full local scan no longer reports either check, but the remaining findings keep the gate red.
+The following changes are published in draft PR #8 and **have not been applied to AWS**. Prior IAM-apply evidence does not prove these new settings are active. Local and initial GitHub scans no longer report either check, but the remaining findings keep the gate red.
 
 | Check | Exact Terraform scope | Local remediation |
 | --- | --- | --- |
@@ -75,7 +77,7 @@ Use an isolated environment so Checkov's dependencies do not replace the applica
 ```powershell
 python -m venv .superpowers/checkov-venv
 .superpowers/checkov-venv/Scripts/python.exe -m pip install -r requirements-security.txt
-.superpowers/checkov-venv/Scripts/python.exe -m pytest tests/test_security_scan.py -q
+.superpowers/checkov-venv/Scripts/python.exe -m pytest tests/test_security_scan.py tests/test_security_scan_errors.py -q
 .superpowers/checkov-venv/Scripts/python.exe security/scan.py
 ```
 

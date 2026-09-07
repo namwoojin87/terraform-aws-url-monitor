@@ -51,6 +51,18 @@ def main():
             f"Parsing errors: {parsing_errors}.",
             "",
         ])
+        for category in ("failed_checks", "skipped_checks"):
+            findings = report.get("results", {}).get(category, [])
+            if findings:
+                lines.extend(["", f"### {category.replace('_', ' ').capitalize()}", ""])
+            for finding in findings:
+                path = finding["file_path"].replace("\\", "/").lstrip("/")
+                lines.append(
+                    f"- `{finding['check_id']}` on `{finding['resource']}` "
+                    f"in `{path}`: {finding['check_name']}"
+                )
+
+        # Decide only after rendering evidence; malformed findings must never announce success.
         if parsing_errors:
             lines.append("ERROR: Parsing errors prevent a complete scan.")
         elif not resources or not (passed + failed + skipped):
@@ -63,18 +75,8 @@ def main():
         else:
             exit_code = 0
             lines.append("PASSED: All evaluated checks passed; no checks were skipped.")
-
-        for category in ("failed_checks", "skipped_checks"):
-            findings = report.get("results", {}).get(category, [])
-            if findings:
-                lines.extend(["", f"### {category.replace('_', ' ').capitalize()}", ""])
-            for finding in findings:
-                path = finding["file_path"].replace("\\", "/").lstrip("/")
-                lines.append(
-                    f"- `{finding['check_id']}` on `{finding['resource']}` "
-                    f"in `{path}`: {finding['check_name']}"
-                )
-    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.TimeoutExpired) as error:
+        exit_code = 2
         lines.extend(["", f"ERROR: {type(error).__name__}: {error}"])
 
     lines.extend([

@@ -2,6 +2,8 @@
 
 이 문서는 공개 가능한 검증 결과와 앞으로 실행할 절차를 구분한다. 아래 기존 결과의 기준일은 **2026-09-07**이며, 문서 작성 자체가 새로운 AWS 실행이나 검증을 의미하지 않는다. 운영 절차의 공통 기준은 [운영 runbook](runbook.md), 전체 구성은 [아키텍처](architecture.md)를 따른다.
 
+추가 수동 1회 실행과 PR 게시 후 실제 CI 결과는 [마무리 검증 기록](final-verification.md)에 별도 기록했다. 한국시간 15:50:56의 새 표본은 HTTP 200 / UP / 299ms, 현재 상태·이력 저장 일치, Scheduler OFF 유지로 확인했다. 아래 이전 시연 결과와 혼합하지 않는다.
+
 ## 1. 기존에 확인한 결과
 
 | 항목 | 확인한 사실 | 근거와 해석 범위 |
@@ -25,8 +27,8 @@ CloudWatch 로그와 Lambda 오류 경보는 기존에 구성되어 있다. 위 
 | 대시보드 배포 IAM | **적용·검증 완료**: bootstrap 정책 1개 변경, 목표 대시보드 3개 작업만 허용 | 아래 IAM 검증표 참조. 역할 신뢰·정책 연결과 기존 정책 문장 9개는 변경하지 않았다. 시뮬레이션은 실제 대시보드 작업 실행이 아니다. |
 | CloudWatch 대시보드 | 로컬 작성·mock 검증 완료, **IAM 완료·runtime 적용 대기·미배포** | 마지막 확인에서 `dashboard_exists=false`였다. 별도의 runtime 변경 검토·배포와 실제 위젯의 대상·리전·시간 범위 확인이 필요하다. 빈 데이터는 `0`이나 장애로 해석하지 않는다. |
 | Terraform mock 검증 | 신규 구성의 로컬 module **5개**, bootstrap **5개** 테스트 통과 | 실제 AWS 호출 없는 mock 검증이다. bootstrap 보완 회귀 테스트 2개를 포함한다. 위 Python 59개 기준선과 다른 테스트 집합이며, AWS 배포·실환경 권한 확인을 대신하지 않는다. |
-| 신규 Python 전체 검증 | 보안 전용 환경에서 **64개 통과**, skip 없음 | 기존 59개와 실제 Checkov fixture 5개를 함께 실행했다. 일반 앱 환경에서는 Checkov 미설치로 보안 fixture 5개만 skip된다. |
-| Checkov 정적 보안 검사 | 최종 로컬 재검사 **154 pass / 18 fail / 0 skip**, scan gate **FAIL**·workflow 로컬 작성 완료, GitHub 미실행 | 최초 152 pass / 20 fail에서 bootstrap 2건을 코드로 보완했다. 새 보완은 AWS 미적용이다. 30개 리소스, 파싱 오류 0, scanner와 gate 종료 코드 모두 1. [보안 검토 기록](security-review.md)에 버전·대상·명령·미해결 항목을 남겼다. 예외는 승인하거나 적용하지 않았다. |
+| 신규 Python 전체 검증 | 보안 전용 환경에서 **70개 통과**, skip 없음 | 기존 59개·실제 Checkov fixture 5개·보고서 오류 회귀 6개를 함께 실행했다. 일반 앱 환경에서는 Checkov 미설치로 보안 fixture 5개만 skip된다. |
+| Checkov 정적 보안 검사 | 최종 로컬 및 최초 GitHub 검사 **154 pass / 18 fail / 0 skip**, scan gate **FAIL**; 원격 실패 증빙 업로드 확인 | 최초 152 pass / 20 fail에서 bootstrap 2건을 코드로 보완하고 PR #8에 게시했다. 새 보완은 AWS 미적용이다. 30개 리소스, 파싱 오류 0, scanner와 gate 종료 코드 모두 1. [보안 검토 기록](security-review.md)에 버전·대상·명령·미해결 항목을 남겼다. 예외는 승인하거나 적용하지 않았다. |
 | 전용 lab 장애 재시연 | **수동 5회 상태·이력·TTL·운영 설정 보존 PASS**, 전이 로그·SNS 토픽 지표 확인 | 아래 실측 상태와 5개 이력, `OUTAGE` 1회·`RECOVERY` 1회·계속 `DOWN`일 때 반복 전이 없음을 확인했다. 같은 시각의 SNS 토픽 지표는 발행 2·전달 보고 2·실패 0이다. Scheduler 경로가 아니며 받은편지함 수신·열람 확인이나 exactly-once 보장은 아니다. |
 | 제출 PPT 보강 | 신규 증빙 확보 후 갱신 예정 | 기존 검증과 새 검증 날짜를 구분한 결과표, 공개 가능한 그림·화면, 연결되는 코드·PR·Actions 출처. |
 

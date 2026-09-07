@@ -4,7 +4,7 @@
 
 ## 상태 표기
 
-**2026-09-07 검증 기준:** URL 검사, 현재 상태·이력 저장, SNS 장애·복구 알림, CloudWatch 로그·오류 경보, 승인 배포, 주간 드리프트 점검이 구성되어 있다. URL Scheduler는 `DISABLED`이며 마지막 확인된 드리프트 실행은 `CLEAN`이다. 신규 CloudWatch 대시보드는 **로컬 작성·mock 검증 및 배포 IAM 적용 완료, runtime 적용 대기·미배포**이고 신규 Terraform mock 검증은 module 5개·bootstrap 5개 통과했다. 마지막 IAM 검증에서 대시보드는 아직 존재하지 않았다. Checkov 최종 로컬 재검사 결과는 **154 pass / 18 fail / 0 skip**으로 gate는 **FAIL**이다. workflow는 로컬 작성 완료·GitHub 미실행 상태이다. 보안 전용 환경에서 기존 59개와 실제 Checkov fixture 5개를 합한 Python **64개가 모두 통과**했다. 미완료 업로드 정리와 전역 알람 조회 권한 축소 2건은 로컬 코드로 보완했으며 AWS 미적용이다.
+**2026-09-07 검증 기준:** URL 검사, 현재 상태·이력 저장, SNS 장애·복구 알림, CloudWatch 로그·오류 경보, 승인 배포, 주간 드리프트 점검이 구성되어 있다. URL Scheduler는 `DISABLED`이며 마지막 확인된 드리프트 실행은 `CLEAN`이다. 신규 CloudWatch 대시보드는 **코드·mock 검증 및 배포 IAM 적용 완료, runtime 적용 대기·미배포**이고 Terraform mock 검증은 module 5개·bootstrap 5개 통과했다. 마지막 IAM 검증에서 대시보드는 아직 존재하지 않았다. 초안 PR #8의 최초 실제 CI는 성공했지만 Checkov는 **154 pass / 18 fail / 0 skip**으로 **FAIL**이며 실패 증빙 업로드를 확인했다. 최종 로컬 재검사도 같은 결과다. Python **70개(기존 59개·실제 Checkov fixture 5개·보고서 오류 회귀 6개)가 모두 통과**했다. 미완료 업로드 정리와 전역 알람 조회 권한 축소 2건은 PR에 게시했으며 AWS 미적용이다. 기존 AWS 검사기 수동 1회 실행도 HTTP 200 / UP 및 DB 저장을 확인했다. [직접 실행 기록](final-verification.md)을 참조한다.
 
 신규 lab의 직접 수동 5회 시연은 상태·이력·TTL·운영 설정 보존 검증을 통과했다. 전이 로그는 장애 1회·복구 1회 및 계속 `DOWN`일 때 반복 전이 없음을 보였고, 같은 시각의 SNS 토픽 지표는 발행 2·전달 보고 2·실패 0이었다. **Scheduler 경로 시험이나 특정 이메일의 받은편지함 수신·열람 확인은 아니다.** 상세 실측값과 범위는 [검증 증빙](acceptance-evidence.md)에 있다.
 
@@ -31,7 +31,7 @@ flowchart TB
   subgraph delivery["2. GitHub 검증과 승인 배포"]
     PR["Pull Request"]
     CI["Python 테스트 · Terraform 검증\nmock 테스트 · TFLint"]
-    Checkov["Checkov 정적 보안 검사\n로컬 gate FAIL · GitHub 미실행"]
+    Checkov["Checkov 정적 보안 검사\n로컬·GitHub gate FAIL · 18건 미해결"]
     Main["main"]
     Plan["Terraform saved plan 생성\n배포 workflow의 plan 작업"]
     Artifact["age 암호화 plan 바이너리\n검토용 요약 · Lambda 패키지"]
@@ -94,7 +94,7 @@ flowchart TB
 
 ### 2. CI/CD: 검증과 적용 권한 분리
 
-기존 CI는 AWS 자격증명 없이 Python 테스트, Terraform 형식·구성 검증, mock provider 테스트와 TFLint를 실행한다. Linux에서는 runtime의 provider lockfile을 읽기 전용으로 초기화한 뒤 validate하여 플랫폼 해시 호환성도 검사한다. 신규 구성의 로컬 Terraform mock 검증은 module 5개·bootstrap 5개 통과했지만 AWS 배포나 실환경 권한 검증은 아니다. Checkov workflow와 실제 scanner fixture 검증은 로컬 작성 완료이다. 최종 전체 스캔은 154 pass / 18 fail / 0 skip, 파싱 오류 0으로 gate FAIL이다. 보안 Green을 주장하지 않으며 미해결 항목 검토와 GitHub 실행 확인이 남아 있다.
+기존 CI는 AWS 자격증명 없이 Python 테스트, Terraform 형식·구성 검증, mock provider 테스트와 TFLint를 실행한다. Linux에서는 runtime의 provider lockfile을 읽기 전용으로 초기화한 뒤 validate하여 플랫폼 해시 호환성도 검사한다. 신규 구성의 로컬 Terraform mock 검증은 module 5개·bootstrap 5개 통과했지만 AWS 배포나 실환경 권한 검증은 아니다. PR #8의 최초 실제 CI 성공과 보안 workflow의 실패 증빙 업로드를 확인했다. 로컬 및 해당 GitHub 전체 스캔은 154 pass / 18 fail / 0 skip, 파싱 오류 0으로 gate FAIL이다. 보안 Green을 주장하지 않으며 미해결 항목 검토가 남아 있다. 원격 실행별 commit과 출처는 [검증 기록](final-verification.md)에 구분했다.
 
 배포는 main에서 수동으로 시작한다. OIDC 계획 역할이 saved plan을 만들고 바이너리를 age로 암호화한다. 검토용 텍스트 요약과 Lambda 패키지는 별도 파일이므로 **모든 artifact가 암호화되었다고 표현하지 않는다.** production 보호 환경의 승인 후 별도 배포 역할이 같은 saved plan을 적용한다. GitHub Actions용 장기 AWS 액세스 키를 사용하는 설계가 아니다.
 

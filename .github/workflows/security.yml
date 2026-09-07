@@ -24,8 +24,8 @@ jobs:
           cache-dependency-path: requirements-security.txt
       - name: Install pinned security scanner
         run: python -m pip install -r requirements-security.txt
-      - name: Verify security gate against real fixtures
-        run: python -m pytest tests/test_security_scan.py -q
+      - name: Verify security gate and report error handling
+        run: python -m pytest tests/test_security_scan.py tests/test_security_scan_errors.py -q
       - name: Scan all Terraform and write evidence
         run: python security/scan.py
       - name: Publish scan summary

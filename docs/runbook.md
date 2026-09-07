@@ -56,7 +56,7 @@ The subscription must not remain `PendingConfirmation`. CloudWatch/SNS metrics s
 
 The new dashboard is controlled by `dashboard_enabled`. The reusable module defaults to `false`; the production input now requests `true` while keeping `schedule_enabled = false`. A local Terraform change is not a live deployment: verify the approved apply before claiming the dashboard exists.
 
-The dashboard-scoped bootstrap IAM update was approved, applied, and verified on 2026-09-07. See [the permission verification record](dashboard-iam-change.md). It is not yet published to GitHub, and the dashboard itself remains undeployed. Do not reapply the historical saved plan or run the older `main` bootstrap configuration, which does not yet include the approved statement. Publish and review the source patch before the next bootstrap operation.
+The dashboard-scoped bootstrap IAM update was approved, applied, and verified on 2026-09-07. See [the permission verification record](dashboard-iam-change.md). Its source is published in draft PR #8, not merged into `main`, and the dashboard itself remains undeployed. Do not reapply the historical saved plan or run the older `main` bootstrap configuration, which does not yet include the approved statement. Complete source review and the merge decision before the next bootstrap operation. The two newer bootstrap security remediations need their own fresh live plan and approval; prior IAM evidence does not prove they are applied. See [the latest execution evidence](final-verification.md).
 
 Deployment order:
 
