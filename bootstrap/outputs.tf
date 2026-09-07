@@ -17,3 +17,8 @@ output "deploy_role_arn" {
   description = "Approved GitHub OIDC role for Terraform apply."
   value       = aws_iam_role.deploy.arn
 }
+
+output "alerts_kms_key_arn" {
+  description = "Customer-managed KMS key used for project SNS alert encryption."
+  value       = aws_kms_key.alerts.arn
+}

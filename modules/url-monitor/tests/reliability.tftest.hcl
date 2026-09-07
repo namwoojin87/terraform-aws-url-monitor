@@ -87,9 +87,10 @@ override_resource {
 }
 
 variables {
-  project_name     = "url-monitor"
-  alert_email      = "alerts@example.com"
-  schedule_enabled = false
+  project_name       = "url-monitor"
+  alert_email        = "alerts@example.com"
+  alerts_kms_key_arn = "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-1111-1111-1111-111111111111"
+  schedule_enabled   = false
   monitor_targets = {
     demo = {
       url               = "https://example.com"

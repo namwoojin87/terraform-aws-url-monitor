@@ -137,7 +137,7 @@ override_resource {
   target          = aws_sns_topic.alerts
   override_during = plan
   values = {
-    arn = "arn:aws:sns:us-east-1:123456789012:url-monitor-alerts"
+    arn = "arn:aws:sns:ap-northeast-2:123456789012:url-monitor-alerts"
   }
 }
 
@@ -145,7 +145,7 @@ override_resource {
   target          = aws_dynamodb_table.history
   override_during = plan
   values = {
-    arn = "arn:aws:dynamodb:us-east-1:123456789012:table/url-monitor-history"
+    arn = "arn:aws:dynamodb:ap-northeast-2:123456789012:table/url-monitor-history"
   }
 }
 
@@ -153,7 +153,7 @@ override_resource {
   target          = aws_dynamodb_table.state
   override_during = plan
   values = {
-    arn = "arn:aws:dynamodb:us-east-1:123456789012:table/url-monitor-state"
+    arn = "arn:aws:dynamodb:ap-northeast-2:123456789012:table/url-monitor-state"
   }
 }
 
@@ -161,13 +161,14 @@ override_resource {
   target          = aws_cloudwatch_log_group.checker
   override_during = plan
   values = {
-    arn = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/url-monitor-checker"
+    arn = "arn:aws:logs:ap-northeast-2:123456789012:log-group:/aws/lambda/url-monitor-checker"
   }
 }
 
 variables {
-  project_name = "url-monitor"
-  alert_email  = "alerts@example.com"
+  project_name       = "url-monitor"
+  alert_email        = "alerts@example.com"
+  alerts_kms_key_arn = "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-1111-1111-1111-111111111111"
   monitor_targets = {
     demo = {
       url               = "https://example.com"
@@ -277,7 +278,7 @@ run "wires_runtime_delivery_and_outputs" {
   }
 
   assert {
-    condition     = output.lambda_function_name == "url-monitor-checker" && output.state_table_name == "url-monitor-state" && output.sns_topic_arn == "arn:aws:sns:us-east-1:123456789012:url-monitor-alerts" && output.schedule_name == "url-monitor-checks" && output.log_group_name == "/aws/lambda/url-monitor-checker"
+    condition     = output.lambda_function_name == "url-monitor-checker" && output.state_table_name == "url-monitor-state" && output.sns_topic_arn == "arn:aws:sns:ap-northeast-2:123456789012:url-monitor-alerts" && output.schedule_name == "url-monitor-checks" && output.log_group_name == "/aws/lambda/url-monitor-checker"
     error_message = "Module outputs must expose the Lambda, state table, topic, schedule, and log group."
   }
 

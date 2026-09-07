@@ -1,6 +1,9 @@
 resource "aws_sns_topic" "alerts" {
-  name = "${var.project_name}-alerts"
-  tags = var.tags
+  name              = "${var.project_name}-alerts"
+  kms_master_key_id = var.alerts_kms_key_arn
+  tags              = var.tags
+
+  depends_on = [aws_iam_role_policy.lambda_alerts_encryption]
 }
 
 resource "aws_sns_topic_subscription" "email" {
@@ -151,6 +154,8 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  depends_on = [aws_sns_topic_policy.alerts]
 
   dimensions = {
     FunctionName = aws_lambda_function.checker.function_name

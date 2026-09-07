@@ -238,6 +238,12 @@ data "aws_iam_policy_document" "deploy" {
     ]
     resources = [for suffix in ["scheduler-dlq", "lambda-dlq"] : "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-${suffix}"]
   }
+
+  statement {
+    sid       = "DescribeProjectAlertKey"
+    actions   = ["kms:DescribeKey"]
+    resources = [aws_kms_key.alerts.arn]
+  }
 }
 
 resource "aws_iam_policy" "deploy" {
