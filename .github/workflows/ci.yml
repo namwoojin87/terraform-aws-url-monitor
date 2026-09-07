@@ -30,7 +30,8 @@ jobs:
       - run: terraform -chdir=bootstrap init -backend=false
       - run: terraform -chdir=bootstrap validate
       - run: terraform -chdir=bootstrap test
-      - run: terraform -chdir=infra init -backend=false
+      # Exercise the same read-only provider lock used by the Linux drift runner.
+      - run: terraform -chdir=infra init -backend=false -input=false -lockfile=readonly
       - run: terraform -chdir=infra validate
       - run: terraform -chdir=modules/url-monitor init -backend=false
       - run: terraform -chdir=modules/url-monitor test

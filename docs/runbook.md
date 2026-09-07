@@ -74,6 +74,8 @@ GitHub Actions email/web delivery depends on the account's notification preferen
 
 The planner has a ten-minute timeout, requests a graceful interrupt and waits up to 30 seconds for lock cleanup before forced termination. A forced runner shutdown may still leave a lock: establish that no operation owns it before considering a manual unlock; this workflow never force-unlocks state.
 
+The runtime provider lockfile includes Windows and Linux package hashes because drift initialization is read-only. When intentionally updating providers, run `terraform -chdir=infra providers lock -platform=windows_amd64 -platform=linux_amd64`, review the selected versions and signed checksums, and commit the lockfile. CI initializes with the same read-only flag and validates the configuration on Linux so missing platform hashes fail before merge. See [cross-platform provider locking](https://developer.hashicorp.com/terraform/cli/commands/providers/lock).
+
 The check performs AWS reads plus Terraform backend locking and consumes a short GitHub runner job. It creates no AWS runtime services. Terraform behavior is documented in the [plan command reference](https://developer.hashicorp.com/terraform/cli/commands/plan) and [machine-readable UI reference](https://developer.hashicorp.com/terraform/internals/machine-readable-ui).
 
 ## Change a target
