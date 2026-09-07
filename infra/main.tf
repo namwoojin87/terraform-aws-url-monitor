@@ -13,6 +13,8 @@ module "url_monitor" {
 
   schedule_enabled = var.schedule_enabled
 
+  dashboard_enabled = var.dashboard_enabled
+
   failure_threshold  = 2
   log_retention_days = 7
 }

@@ -187,7 +187,6 @@ data "aws_iam_policy_document" "deploy" {
 
   statement {
     actions = [
-      "cloudwatch:DescribeAlarms",
       "dynamodb:ListTables",
       "iam:ListRoles",
       "lambda:GetAccountSettings",
@@ -199,6 +198,15 @@ data "aws_iam_policy_document" "deploy" {
       "sns:ListTopics",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid = "ManageProjectDashboard"
+    actions = [
+      "cloudwatch:GetDashboard", "cloudwatch:PutDashboard", "cloudwatch:DeleteDashboards",
+    ]
+    # Dashboards are global; the ARN intentionally has no region component.
+    resources = ["arn:aws:cloudwatch::${data.aws_caller_identity.current.account_id}:dashboard/${var.project_name}-operations"]
   }
 }
 

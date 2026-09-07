@@ -52,6 +52,61 @@ aws sns list-subscriptions-by-topic --region ap-northeast-2 --topic-arn $topicAr
 
 The subscription must not remain `PendingConfirmation`. CloudWatch/SNS metrics should reflect one publish for a normal outage transition and one additional publish for its recovery.
 
+## Operations dashboard
+
+The new dashboard is controlled by `dashboard_enabled`. The reusable module defaults to `false`; the production input now requests `true` while keeping `schedule_enabled = false`. A local Terraform change is not a live deployment: verify the approved apply before claiming the dashboard exists.
+
+The dashboard-scoped bootstrap IAM update was approved, applied, and verified on 2026-09-07. See [the permission verification record](dashboard-iam-change.md). It is not yet published to GitHub, and the dashboard itself remains undeployed. Do not reapply the historical saved plan or run the older `main` bootstrap configuration, which does not yet include the approved statement. Publish and review the source patch before the next bootstrap operation.
+
+Deployment order:
+
+1. Review the bootstrap plan with a non-root operator. The new IAM statement grants only `cloudwatch:GetDashboard`, `cloudwatch:PutDashboard`, and `cloudwatch:DeleteDashboards` on the exact `${project_name}-operations` dashboard. Dashboard ARNs are global and have no region component. Obtain explicit authorization before this access change.
+2. Apply only the reviewed bootstrap plan through the existing bootstrap recovery procedure. Do not give the GitHub role general CloudWatch administration or change its OIDC trust.
+3. Merge the reviewed runtime change once the applicable checks and unresolved security findings have been addressed. Create a **new** protected `Terraform Deploy` plan; do not reuse an earlier saved plan.
+4. Confirm the plan adds one dashboard, retains Scheduler `DISABLED`, and has no unexpected resource changes. Approve that exact plan through `production`.
+5. Open the authenticated console URL from `terraform -chdir=infra output -raw dashboard_url`. A null output means the dashboard is disabled. Confirm the widgets render in Seoul and inspect their actual data window.
+
+The dashboard displays Lambda invocation/error/throttle/runtime metrics, SNS publication/delivery/failure metrics, and read/write capacity metrics for both DynamoDB tables. It uses 13 existing metric series and no custom metrics, Logs Insights queries, or public sharing. The operator needs their own authorized CloudWatch read access; the Lambda execution role receives no new permissions.
+
+Interpretation limits:
+
+- The pause banner is Terraform configuration, not a live Scheduler health check.
+- Missing data while checks are paused is expected and does not prove endpoint health.
+- Lambda `Duration` measures function runtime, not per-URL response latency or availability. Query DynamoDB history for per-URL measurements.
+- SNS delivery metrics are topic-wide service delivery reports, not proof a recipient read an email.
+- DynamoDB capacity consumption is not a count of stored items.
+
+CloudWatch currently includes three custom dashboards with up to 50 metrics each in its free allowance. Check all dashboards in the account before applying; the allowance is shared, not reserved for this project. No zero-cost guarantee is made for AWS usage or optional future features. See [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/) and [dashboard resource permissions](https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudwatch.html).
+
+## Security scan and review
+
+`Terraform Security` runs Checkov in a separate Python environment on pull requests, pushes to `main`, and manual dispatches. It needs repository read access only: no AWS credentials, OIDC permission, deployment permission, or production environment secrets. The workflow first tests the gate against real insecure, clean, empty, malformed, and suppressed fixtures, then scans all repository Terraform.
+
+The gate fails on findings, unapproved skips, parser errors, empty scans, and unexpected scanner failure. A summary and raw scanner evidence are uploaded even when the scan fails, provided the scanner produced them. Setup failures are reported as missing evidence, never as a clean scan. Reports have 14-day artifact retention; local `security/reports/` is ignored by Git.
+
+Use a dedicated virtual environment locally so Checkov dependencies do not alter the monitor's application environment:
+
+```powershell
+py -3.12 -m venv .superpowers/checkov-venv
+.\.superpowers\checkov-venv\Scripts\python.exe -m pip install -r requirements-security.txt
+.\.superpowers\checkov-venv\Scripts\python.exe -m pytest tests/test_security_scan.py -q
+.\.superpowers\checkov-venv\Scripts\python.exe security/scan.py
+```
+
+The `.superpowers/` directory is ignored by Git; do not force-add the environment or reports. Checkov runs offline without downloading Terraform modules or contacting an optional platform; the dependency installation itself requires network access.
+
+The initial repository scan reported 152 passed, 20 failed, and 0 skipped checks. After two local bootstrap remediations, the latest scan remains **not passing**: 154 passed, 18 failed, and 0 skipped checks. The seven-day incomplete-upload abort setting and removal of global alarm-read permission are code changes only; they require a new reviewed bootstrap plan and explicit live-change approval. The already applied dashboard-only IAM record does not approve these later changes. Consult [the security review](security-review.md) before proceeding. Some remaining findings require meaningful cost, retention, encryption-key, or architecture decisions. Do not add a blanket skip, soft-fail mode, broad IAM permissions, or paid infrastructure to obtain a green badge. Adding the workflow does not by itself configure a required branch-protection check.
+
+Review raw artifacts before sharing: scans can contain source snippets, resource identifiers, and local paths. Keep credentials, personal addresses, and backend configuration out of tracked Terraform so CI artifacts do not expose them.
+
+## Bounded incident demonstration
+
+For the current paused deployment, follow [the acceptance evidence and procedure](acceptance-evidence.md). The approved manual demonstration invokes the existing Lambda at most five times using one unique lab ID, leaves the `demo` item and Scheduler input untouched, and ends the lab state at `UP`.
+
+The failure injection changes the lab's expected HTTP status to `503` while `https://example.com` still returns `200`; it tests failure classification and state transitions, not a real external-site outage. The original expected status `200` restores the lab. Existing subscribers receive the normal outage and recovery notifications. Do not retry an ambiguous invocation blindly: inspect its state, history, and logs first.
+
+This is a direct Lambda integration test, not evidence that the disabled Scheduler ran. Lab rows become eligible for TTL deletion after seven days; no manual table deletion or resource teardown is required.
+
 ## Weekly infrastructure drift check
 
 The `Terraform Drift Check` workflow runs on `main` every Monday at 00:17 UTC (09:17 Asia/Seoul). To run it immediately, open GitHub Actions, select **Terraform Drift Check**, choose **Run workflow**, and keep branch **main**. Other branches are skipped because the existing OIDC plan-role trust permits only `main`.

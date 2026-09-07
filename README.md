@@ -17,6 +17,8 @@ This confirms two consecutive failures are required for an outage, continued fai
 
 ## Architecture
 
+This is the runtime view. The [full architecture](docs/architecture.md) also shows credential-free CI, OIDC plan/apply roles, protected deployment approval, encrypted plan artifacts, remote state, drift detection, and cost controls. It labels new local changes separately from deployed services.
+
 ```text
 EventBridge Scheduler (5 minutes)
              |
@@ -44,6 +46,16 @@ The Lambda handles targets sequentially, records the current state by stable tar
 - Least-privilege runtime IAM for the Lambda and Scheduler components
 - Short log retention and a monthly cost-budget notification
 - Weekly infrastructure drift checks with a sanitized GitHub Actions summary
+
+## Monitoring and security extension status
+
+The current extension adds Terraform code for an optional private CloudWatch operations dashboard and a credential-free Checkov workflow. These are implementation changes, **not evidence that the dashboard or workflow has already been deployed**. The exact dashboard-scoped bootstrap permission update was approved, applied, and verified on 2026-09-07; see [the IAM verification record](docs/dashboard-iam-change.md). GitHub publication and the protected runtime deployment remain pending; the Scheduler remains disabled.
+
+The initial full security scan found **152 passed checks, 20 failed checks, and no skipped checks** across 30 resources. After two local bootstrap fixes, the latest scan reports **154 passed, 18 failed, and no skipped checks**. Incomplete-upload cleanup and project-scoped alarm reads are fixed in code, not yet applied to AWS. The security gate still fails; no exceptions have been approved. See the [security review](docs/security-review.md) for findings, costs, and the distinction between provider-managed encryption and customer-managed keys.
+
+Final local verification on 2026-09-07 passed **64 Python tests** in the isolated security environment, including five real Checkov fixtures, plus **5 module and 5 bootstrap Terraform mock tests**. The full repository security scan still exited `1` with 18 unresolved findings; passing the gate's tests does not mean the infrastructure passed the scan. Terraform format/validate, TFLint, and whitespace checks also passed.
+
+The [acceptance evidence](docs/acceptance-evidence.md) records a separate, bounded manual drill against the deployed Lambda and DynamoDB tables. It distinguishes actual results from planned dashboard and CI verification. This drill does not enable the Scheduler or change the production target.
 
 ## Setup
 
@@ -79,7 +91,9 @@ The committed demonstration target is `https://example.com` under the stable `de
 
 ## Cost controls
 
-The design intentionally excludes VPC networking, NAT Gateway, EC2, load balancers, database servers, public IPv4 addresses, custom metrics, and dashboards. DynamoDB is on-demand: the state table remains tiny, and each enabled target writes 288 small history items per day that become eligible for automatic deletion after seven days.
+The design intentionally excludes VPC networking, NAT Gateway, EC2, load balancers, database servers, public IPv4 addresses, and custom metrics. DynamoDB is on-demand: the state table remains tiny, and each enabled target writes 288 small history items per day that become eligible for automatic deletion after seven days.
+
+The optional operations dashboard uses 13 existing metric series, without log queries, custom metrics, or public sharing. CloudWatch currently lists a free allowance of three custom dashboards with up to 50 metrics each; check the account's total usage before deployment. Additional dashboards and underlying AWS activity may incur charges, even while the Scheduler is paused. See [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/) and the [dashboard runbook](docs/runbook.md#operations-dashboard).
 
 ## Repository layout
 
@@ -89,3 +103,7 @@ The design intentionally excludes VPC networking, NAT Gateway, EC2, load balance
 - `lambda/url_monitor/` — tested Python monitoring handler
 - `.github/workflows/` — validation and approved deployment workflows
 - `docs/runbook.md` — operating and teardown guidance
+- `docs/architecture.md` — runtime, delivery, security, and cost-control architecture
+- `docs/acceptance-evidence.md` — verification scope and sanitized demonstration results
+- `docs/security-review.md` — current findings and decisions still requiring review
+- `security/` — strict Checkov gate; local raw reports are ignored by Git

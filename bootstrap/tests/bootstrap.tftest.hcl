@@ -58,6 +58,19 @@ run "plans_safe_bootstrap" {
   }
 }
 
+run "limits_dashboard_management_to_one_project_dashboard" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for statement in data.aws_iam_policy_document.deploy.statement :
+      toset(statement.actions) == toset(["cloudwatch:GetDashboard", "cloudwatch:PutDashboard", "cloudwatch:DeleteDashboards"]) &&
+      toset(statement.resources) == toset(["arn:aws:cloudwatch::123456789012:dashboard/url-monitor-operations"])
+    ])
+    error_message = "Deploy must manage only the named project dashboard, whose ARN has no region."
+  }
+}
+
 run "keeps_bootstrap_security_contract" {
   command = apply
 
@@ -141,5 +154,30 @@ run "keeps_bootstrap_security_contract" {
   assert {
     condition     = output.state_bucket_name == aws_s3_bucket.state.id && output.aws_account_id == "123456789012" && output.plan_role_arn == aws_iam_role.plan.arn && output.deploy_role_arn == aws_iam_role.deploy.arn
     error_message = "Bootstrap outputs must expose the bucket, account, and both GitHub role ARNs."
+  }
+}
+
+run "aborts_incomplete_state_uploads" {
+  command = plan
+
+  assert {
+    condition     = try(one(one(aws_s3_bucket_lifecycle_configuration.state.rule).abort_incomplete_multipart_upload).days_after_initiation == 7, false)
+    error_message = "Incomplete state uploads must be aborted after seven days."
+  }
+}
+
+run "restricts_alarm_reads_to_project" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for statement in data.aws_iam_policy_document.deploy.statement :
+      contains(statement.actions, "cloudwatch:DescribeAlarms")
+      ]) && alltrue([
+      for statement in data.aws_iam_policy_document.deploy.statement :
+      !contains(statement.actions, "cloudwatch:DescribeAlarms") ||
+      toset(statement.resources) == toset(["arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:url-monitor-*"])
+    ])
+    error_message = "Alarm reads must remain available only for project alarms."
   }
 }

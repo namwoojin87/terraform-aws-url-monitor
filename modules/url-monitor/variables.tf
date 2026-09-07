@@ -60,6 +60,12 @@ variable "schedule_enabled" {
   default     = true
 }
 
+variable "dashboard_enabled" {
+  description = "Create one operations dashboard using only existing AWS service metrics."
+  type        = bool
+  default     = false
+}
+
 variable "failure_threshold" {
   description = "Consecutive failures required before outage notification."
   type        = number
