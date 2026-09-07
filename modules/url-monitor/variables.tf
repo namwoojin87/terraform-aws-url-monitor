@@ -15,6 +15,16 @@ variable "alert_email" {
   sensitive   = true
 }
 
+variable "alerts_kms_key_arn" {
+  description = "ARN of the Seoul customer-managed KMS key used to encrypt the SNS alert topic."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws:kms:ap-northeast-2:[0-9]{12}:key/[a-zA-Z0-9-]+$", var.alerts_kms_key_arn))
+    error_message = "alerts_kms_key_arn must be a Seoul KMS key ARN, not an alias."
+  }
+}
+
 variable "monitor_targets" {
   description = "Public HTTP(S) endpoints keyed by stable monitor ID."
   type = map(object({
@@ -58,6 +68,12 @@ variable "schedule_enabled" {
   description = "Whether scheduled URL checks are enabled."
   type        = bool
   default     = true
+}
+
+variable "dashboard_enabled" {
+  description = "Create one operations dashboard using only existing AWS service metrics."
+  type        = bool
+  default     = false
 }
 
 variable "failure_threshold" {

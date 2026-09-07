@@ -16,6 +16,12 @@ variable "schedule_enabled" {
   default     = false
 }
 
+variable "dashboard_enabled" {
+  description = "Whether to create the private AWS operations dashboard."
+  type        = bool
+  default     = false
+}
+
 variable "monitor_targets" {
   description = "Public endpoints passed to the monitor module."
   type = map(object({

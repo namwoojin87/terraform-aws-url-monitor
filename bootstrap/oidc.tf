@@ -187,7 +187,6 @@ data "aws_iam_policy_document" "deploy" {
 
   statement {
     actions = [
-      "cloudwatch:DescribeAlarms",
       "dynamodb:ListTables",
       "iam:ListRoles",
       "lambda:GetAccountSettings",
@@ -199,6 +198,51 @@ data "aws_iam_policy_document" "deploy" {
       "sns:ListTopics",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid = "ManageProjectDashboard"
+    actions = [
+      "cloudwatch:GetDashboard", "cloudwatch:PutDashboard", "cloudwatch:DeleteDashboards",
+    ]
+    # Dashboards are global; the ARN intentionally has no region component.
+    resources = ["arn:aws:cloudwatch::${data.aws_caller_identity.current.account_id}:dashboard/${var.project_name}-operations"]
+  }
+
+  statement {
+    sid       = "ManageProjectPointInTimeRecovery"
+    actions   = ["dynamodb:UpdateContinuousBackups"]
+    resources = [for suffix in ["state", "history"] : "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}-${suffix}"]
+  }
+
+  statement {
+    sid = "ManageProjectAsyncFailurePolicy"
+    actions = [
+      "lambda:GetFunctionEventInvokeConfig",
+      "lambda:PutFunctionEventInvokeConfig",
+      "lambda:DeleteFunctionEventInvokeConfig",
+    ]
+    resources = ["arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.project_name}-checker"]
+  }
+
+  statement {
+    sid = "ManageProjectFailureQueues"
+    actions = [
+      "sqs:CreateQueue",
+      "sqs:DeleteQueue",
+      "sqs:GetQueueAttributes",
+      "sqs:ListQueueTags",
+      "sqs:SetQueueAttributes",
+      "sqs:TagQueue",
+      "sqs:UntagQueue",
+    ]
+    resources = [for suffix in ["scheduler-dlq", "lambda-dlq"] : "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-${suffix}"]
+  }
+
+  statement {
+    sid       = "DescribeProjectAlertKey"
+    actions   = ["kms:DescribeKey"]
+    resources = [aws_kms_key.alerts.arn]
   }
 }
 

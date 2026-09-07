@@ -1,4 +1,9 @@
 mock_provider "aws" {
+  mock_data "aws_region" {
+    defaults = {
+      region = "ap-northeast-2"
+    }
+  }
   mock_data "aws_caller_identity" {
     defaults = {
       account_id = "123456789012"
@@ -11,6 +16,103 @@ mock_provider "aws" {
     }
   }
 
+}
+
+run "dashboard_disabled_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudwatch_dashboard.operations) == 0 && output.dashboard_name == null
+    error_message = "The reusable module must not create a dashboard unless opted in."
+  }
+}
+
+run "dashboard_uses_scoped_existing_metrics_and_preserves_paused_schedule" {
+  command = plan
+
+  variables {
+    dashboard_enabled = true
+    schedule_enabled  = false
+  }
+
+  assert {
+    condition     = aws_cloudwatch_dashboard.operations[0].dashboard_name == "url-monitor-operations" && output.dashboard_name == "url-monitor-operations"
+    error_message = "Enabling the dashboard must expose the exact project dashboard name."
+  }
+
+  assert {
+    condition     = aws_scheduler_schedule.monitor.state == "DISABLED"
+    error_message = "Creating a dashboard must not enable URL checks."
+  }
+
+  assert {
+    condition = alltrue([
+      for widget in jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets :
+      contains(["text", "metric"], widget.type)
+    ])
+    error_message = "Only text and existing metric widgets are allowed; no log queries or custom widgets."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for widget in jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets :
+      [for metric in widget.properties.metrics : contains(["AWS/Lambda", "AWS/SNS", "AWS/DynamoDB", "AWS/Scheduler", "AWS/SQS"], metric[0])]
+      if widget.type == "metric"
+    ]))
+    error_message = "Every metric must use an existing AWS service namespace; no custom metrics or expressions."
+  }
+
+  assert {
+    condition = alltrue([
+      for widget in jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets :
+      widget.properties.region == "ap-northeast-2" && widget.properties.period == 300
+      if widget.type == "metric"
+    ])
+    error_message = "Every metric must use the deployed region and a five-minute aggregation."
+  }
+
+  assert {
+    condition = contains(flatten([
+      for widget in jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets :
+      [for metric in widget.properties.metrics : join("/", slice(metric, 0, 4))]
+      if widget.type == "metric"
+    ]), "AWS/Lambda/Invocations/FunctionName/url-monitor-checker")
+    error_message = "The invocation graph must target this project's Lambda rather than account-wide metrics."
+  }
+
+  assert {
+    condition = contains(flatten([
+      for widget in jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets :
+      [for metric in widget.properties.metrics : join("/", slice(metric, 0, 4))]
+      if widget.type == "metric"
+    ]), "AWS/SNS/NumberOfNotificationsDelivered/TopicName/url-monitor-alerts")
+    error_message = "The delivery graph must target this project's SNS topic."
+  }
+
+  assert {
+    condition = alltrue([
+      for table in ["url-monitor-state", "url-monitor-history"] :
+      contains(flatten([
+        for widget in jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets :
+        [for metric in widget.properties.metrics : join("/", slice(metric, 0, 4))]
+        if widget.type == "metric"
+      ]), "AWS/DynamoDB/ConsumedWriteCapacityUnits/TableName/${table}")
+    ])
+    error_message = "Both current-state and history tables must appear in the write-capacity graph."
+  }
+
+  assert {
+    condition = length(flatten([
+      for widget in jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets :
+      [for metric in widget.properties.metrics : metric[1]] if widget.type == "metric"
+    ])) <= 20
+    error_message = "The dashboard must remain a small bounded set of existing metrics."
+  }
+
+  assert {
+    condition     = strcontains(jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets[0].properties.markdown, "DISABLED") && strcontains(output.dashboard_url, "ap-northeast-2")
+    error_message = "Operators must see the configured pause state and a link for the correct region."
+  }
 }
 
 override_resource {
@@ -35,7 +137,7 @@ override_resource {
   target          = aws_sns_topic.alerts
   override_during = plan
   values = {
-    arn = "arn:aws:sns:us-east-1:123456789012:url-monitor-alerts"
+    arn = "arn:aws:sns:ap-northeast-2:123456789012:url-monitor-alerts"
   }
 }
 
@@ -43,7 +145,7 @@ override_resource {
   target          = aws_dynamodb_table.history
   override_during = plan
   values = {
-    arn = "arn:aws:dynamodb:us-east-1:123456789012:table/url-monitor-history"
+    arn = "arn:aws:dynamodb:ap-northeast-2:123456789012:table/url-monitor-history"
   }
 }
 
@@ -51,7 +153,7 @@ override_resource {
   target          = aws_dynamodb_table.state
   override_during = plan
   values = {
-    arn = "arn:aws:dynamodb:us-east-1:123456789012:table/url-monitor-state"
+    arn = "arn:aws:dynamodb:ap-northeast-2:123456789012:table/url-monitor-state"
   }
 }
 
@@ -59,13 +161,14 @@ override_resource {
   target          = aws_cloudwatch_log_group.checker
   override_during = plan
   values = {
-    arn = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/url-monitor-checker"
+    arn = "arn:aws:logs:ap-northeast-2:123456789012:log-group:/aws/lambda/url-monitor-checker"
   }
 }
 
 variables {
-  project_name = "url-monitor"
-  alert_email  = "alerts@example.com"
+  project_name       = "url-monitor"
+  alert_email        = "alerts@example.com"
+  alerts_kms_key_arn = "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-1111-1111-1111-111111111111"
   monitor_targets = {
     demo = {
       url               = "https://example.com"
@@ -175,7 +278,7 @@ run "wires_runtime_delivery_and_outputs" {
   }
 
   assert {
-    condition     = output.lambda_function_name == "url-monitor-checker" && output.state_table_name == "url-monitor-state" && output.sns_topic_arn == "arn:aws:sns:us-east-1:123456789012:url-monitor-alerts" && output.schedule_name == "url-monitor-checks" && output.log_group_name == "/aws/lambda/url-monitor-checker"
+    condition     = output.lambda_function_name == "url-monitor-checker" && output.state_table_name == "url-monitor-state" && output.sns_topic_arn == "arn:aws:sns:ap-northeast-2:123456789012:url-monitor-alerts" && output.schedule_name == "url-monitor-checks" && output.log_group_name == "/aws/lambda/url-monitor-checker"
     error_message = "Module outputs must expose the Lambda, state table, topic, schedule, and log group."
   }
 

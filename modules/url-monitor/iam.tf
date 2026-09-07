@@ -35,6 +35,16 @@ data "aws_iam_policy_document" "lambda" {
     actions   = ["sns:Publish"]
     resources = [aws_sns_topic.alerts.arn]
   }
+  statement {
+    sid       = "SendExecutionFailures"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.lambda_dlq.arn]
+  }
+  statement {
+    sid       = "WriteSampledTraces"
+    actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "lambda" {
@@ -75,6 +85,11 @@ data "aws_iam_policy_document" "scheduler" {
   statement {
     actions   = ["lambda:InvokeFunction"]
     resources = [aws_lambda_function.checker.arn]
+  }
+  statement {
+    sid       = "SendDeliveryFailures"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.scheduler_dlq.arn]
   }
 }
 

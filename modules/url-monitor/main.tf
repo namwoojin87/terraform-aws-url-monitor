@@ -1,6 +1,9 @@
 resource "aws_sns_topic" "alerts" {
-  name = "${var.project_name}-alerts"
-  tags = var.tags
+  name              = "${var.project_name}-alerts"
+  kms_master_key_id = var.alerts_kms_key_arn
+  tags              = var.tags
+
+  depends_on = [aws_iam_role_policy.lambda_alerts_encryption]
 }
 
 resource "aws_sns_topic_subscription" "email" {
@@ -22,6 +25,10 @@ resource "aws_dynamodb_table" "state" {
   ttl {
     attribute_name = "expires_at"
     enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
   }
 
   tags = var.tags
@@ -48,6 +55,10 @@ resource "aws_dynamodb_table" "history" {
     enabled        = true
   }
 
+  point_in_time_recovery {
+    enabled = true
+  }
+
   tags = var.tags
 }
 
@@ -66,6 +77,14 @@ resource "aws_lambda_function" "checker" {
   source_code_hash = var.lambda_package.source_code_hash
   timeout          = 30
   memory_size      = 128
+
+  dead_letter_config {
+    target_arn = aws_sqs_queue.lambda_dlq.arn
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -89,7 +108,7 @@ resource "aws_scheduler_schedule" "monitor" {
   group_name = aws_scheduler_schedule_group.monitor.name
   state      = var.schedule_enabled ? "ENABLED" : "DISABLED"
 
-  depends_on = [aws_iam_role_policy.scheduler]
+  depends_on = [aws_iam_role_policy.scheduler, aws_lambda_function_event_invoke_config.checker]
 
   flexible_time_window {
     mode = "OFF"
@@ -113,6 +132,10 @@ resource "aws_scheduler_schedule" "monitor" {
       }
     })
 
+    dead_letter_config {
+      arn = aws_sqs_queue.scheduler_dlq.arn
+    }
+
     retry_policy {
       maximum_event_age_in_seconds = 300
       maximum_retry_attempts       = 1
@@ -131,6 +154,8 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  depends_on = [aws_sns_topic_policy.alerts]
 
   dimensions = {
     FunctionName = aws_lambda_function.checker.function_name

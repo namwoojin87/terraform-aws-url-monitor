@@ -1,9 +1,10 @@
 module "url_monitor" {
   source = "../modules/url-monitor"
 
-  project_name    = "url-monitor"
-  alert_email     = var.alert_email
-  monitor_targets = var.monitor_targets
+  project_name       = "url-monitor"
+  alert_email        = var.alert_email
+  alerts_kms_key_arn = data.aws_kms_key.alerts.arn
+  monitor_targets    = var.monitor_targets
   lambda_package = {
     filename         = data.archive_file.lambda.output_path
     source_code_hash = data.archive_file.lambda.output_base64sha256
@@ -12,6 +13,8 @@ module "url_monitor" {
   schedule_expression = "rate(5 minutes)"
 
   schedule_enabled = var.schedule_enabled
+
+  dashboard_enabled = var.dashboard_enabled
 
   failure_threshold  = 2
   log_retention_days = 7

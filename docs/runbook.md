@@ -52,6 +52,64 @@ aws sns list-subscriptions-by-topic --region ap-northeast-2 --topic-arn $topicAr
 
 The subscription must not remain `PendingConfirmation`. CloudWatch/SNS metrics should reflect one publish for a normal outage transition and one additional publish for its recovery.
 
+## Operations dashboard
+
+The new dashboard is controlled by `dashboard_enabled`. The reusable module defaults to `false`; the production input now requests `true` while keeping `schedule_enabled = false`. A local Terraform change is not a live deployment: verify the approved apply before claiming the dashboard exists.
+
+The dashboard-scoped bootstrap IAM update was approved and applied on 2026-09-07; see its [historical record](dashboard-iam-change.md). A separately approved hardening plan has now also been applied: the SNS key/alias, exact reliability-management permissions, wildcard alarm-read removal and seven-day incomplete-upload cleanup. Direct AWS verification and a no-change bootstrap plan completed at 09:04:34 UTC; see the [bootstrap apply record](bootstrap-hardening-apply-2026-09-07.md). The dashboard and other runtime hardening remain undeployed. These changes and records belong to draft PR #8, which has not been merged into `main`. Do not reapply historical plans or run the older `main` bootstrap configuration. Complete source review and the integration decision before further configuration changes.
+
+Deployment order (the recorded bootstrap stage is complete; never reuse its saved plan):
+
+1. Completed bootstrap review: the non-root operator reviewed the exact SNS key/alias, exact-key `DescribeKey`, exact-table PITR management, exact-function async management and management of the two failure queues, alongside the alarm-read and lifecycle remediations. The existing dashboard grant remained limited to `cloudwatch:GetDashboard`, `cloudwatch:PutDashboard`, and `cloudwatch:DeleteDashboards` on the exact global `${project_name}-operations` ARN.
+2. Completed bootstrap apply: the separately approved saved plan was applied once and verified. The key alias and supporting grants now exist. Any future bootstrap delta needs a fresh reviewed plan and its own approval; preserve the existing key, scoped grants and trust/state boundaries unless a change is explicitly approved. Do not infer permission for GitHub key administration, general CloudWatch administration or new OIDC trust.
+3. Merge the reviewed runtime change once the applicable checks and unresolved security findings have been addressed. Create a **new** protected `Terraform Deploy` plan; do not reuse an earlier saved plan.
+4. Confirm the runtime plan includes the approved dashboard, two queues, async failure configuration, two PITR updates, tracing and SNS encryption/publisher policies; retains Scheduler `DISABLED`; and contains no unreviewed resource replacement or deletion. Approve that exact saved plan through `production` only after applicable security decisions are complete.
+5. Open the authenticated console URL from `terraform -chdir=infra output -raw dashboard_url`. A null output means the dashboard is disabled. Confirm the widgets render in Seoul and inspect their actual data window.
+
+The updated dashboard code displays 20 existing metric series: the previous 13 Lambda/SNS/DynamoDB series plus four Scheduler delivery/failure signals, Lambda `DeadLetterErrors`, and visible-message depth for both failure queues. It uses no custom metrics, Logs Insights queries, or public sharing. The operator needs their own authorized CloudWatch read access; the dashboard itself grants no permissions to the Lambda execution role. The separate reliability extension adds only its required DLQ send and tracing permissions.
+
+This **runtime extension is not deployed**. Its supporting bootstrap permissions and SNS key were separately approved, applied and verified; that approval does not authorize a runtime apply or security exceptions. Follow the [manual recovery runbook](recovery-runbook.md) and the [approved hardening scope](superpowers/specs/2026-09-07-low-cost-hardening.md). The two queues are evidence storage, not automatic retry workers.
+
+Interpretation limits:
+
+- The pause banner is Terraform configuration, not a live Scheduler health check.
+- Missing data while checks are paused is expected and does not prove endpoint health.
+- Lambda `Duration` measures function runtime, not per-URL response latency or availability. Query DynamoDB history for per-URL measurements.
+- SNS delivery metrics are topic-wide service delivery reports, not proof a recipient read an email.
+- DynamoDB capacity consumption is not a count of stored items.
+- Scheduler delivery errors and Lambda execution errors describe different stages. A zero visible-message count does not prove successful end-to-end delivery; inspect the failure-to-send and `DeadLetterErrors` signals as well.
+
+CloudWatch currently includes three custom dashboards with up to 50 metrics each in its free allowance. Check all dashboards in the account before applying; the allowance is shared, not reserved for this project. No zero-cost guarantee is made for AWS usage or optional future features. See [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/) and [dashboard resource permissions](https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudwatch.html).
+
+## Security scan and review
+
+`Terraform Security` runs Checkov in a separate Python environment on pull requests, pushes to `main`, and manual dispatches. It needs repository read access only: no AWS credentials, OIDC permission, deployment permission, or production environment secrets. The workflow first tests the gate against real insecure, clean, empty, malformed, and suppressed fixtures, then scans all repository Terraform.
+
+The gate fails on findings, unapproved skips, parser errors, empty scans, and unexpected scanner failure. A summary and raw scanner evidence are uploaded even when the scan fails, provided the scanner produced them. Setup failures are reported as missing evidence, never as a clean scan. Reports have 14-day artifact retention; local `security/reports/` is ignored by Git.
+
+Use a dedicated virtual environment locally so Checkov dependencies do not alter the monitor's application environment:
+
+```powershell
+py -3.12 -m venv .superpowers/checkov-venv
+.\.superpowers\checkov-venv\Scripts\python.exe -m pip install -r requirements-security.txt
+.\.superpowers\checkov-venv\Scripts\python.exe -m pytest tests/test_security_scan.py -q
+.\.superpowers\checkov-venv\Scripts\python.exe security/scan.py
+```
+
+The `.superpowers/` directory is ignored by Git; do not force-add the environment or reports. Checkov runs offline without downloading Terraform modules or contacting an optional platform; the dependency installation itself requires network access.
+
+The initial repository scan reported 152 passed, 20 failed and 0 skipped checks; two earlier bootstrap remediations reduced the findings to 18. The latest recorded hardening scan is **not passing**: 37 resources, 195 passed, 16 failed, 0 skipped and 0 parsing errors. Five old findings are resolved in code, while the new KMS account-delegation policy adds three findings requiring contextual owner review. The separately approved bootstrap key/IAM and lifecycle changes are now applied and verified. Runtime changes still require a new reviewed saved plan and production approval. Bootstrap authorization did not approve scanner exceptions, and no new scan or green security result is claimed by that apply. Consult [the security review](security-review.md), [dated code verification](hardening-verification-2026-09-07.md) and [bootstrap apply record](bootstrap-hardening-apply-2026-09-07.md). Do not add a blanket skip, soft-fail mode, meaningless policy condition, broad IAM permission, or paid infrastructure merely to obtain a green badge. Adding the workflow does not by itself configure a required branch-protection check.
+
+Review raw artifacts before sharing: scans can contain source snippets, resource identifiers, and local paths. Keep credentials, personal addresses, and backend configuration out of tracked Terraform so CI artifacts do not expose them.
+
+## Bounded incident demonstration
+
+For the current paused deployment, follow [the acceptance evidence and procedure](acceptance-evidence.md). The approved manual demonstration invokes the existing Lambda at most five times using one unique lab ID, leaves the `demo` item and Scheduler input untouched, and ends the lab state at `UP`.
+
+The failure injection changes the lab's expected HTTP status to `503` while `https://example.com` still returns `200`; it tests failure classification and state transitions, not a real external-site outage. The original expected status `200` restores the lab. Existing subscribers receive the normal outage and recovery notifications. Do not retry an ambiguous invocation blindly: inspect its state, history, and logs first.
+
+This is a direct Lambda integration test, not evidence that the disabled Scheduler ran. Lab rows become eligible for TTL deletion after seven days; no manual table deletion or resource teardown is required.
+
 ## Weekly infrastructure drift check
 
 The `Terraform Drift Check` workflow runs on `main` every Monday at 00:17 UTC (09:17 Asia/Seoul). To run it immediately, open GitHub Actions, select **Terraform Drift Check**, choose **Run workflow**, and keep branch **main**. Other branches are skipped because the existing OIDC plan-role trust permits only `main`.
@@ -124,13 +182,15 @@ The module intentionally does not set a per-function reserved concurrency value.
 
 ## Destroy runtime resources
 
-Use `Terraform Deploy` with operation `destroy`, review the saved destroy plan, and approve the protected `production` job. This removes runtime monitor resources while retaining the bootstrap state storage, budget notification, and GitHub OIDC roles.
+Use `Terraform Deploy` with operation `destroy`, review the saved destroy plan, and approve the protected `production` job. This removes runtime monitor resources while retaining the bootstrap state storage, budget notification, GitHub OIDC roles, and the bootstrap-owned SNS key. Destroying the runtime or pausing the schedule does not remove that key or its storage charges.
 
-Treat destruction as irreversible for current monitor state and logs. Verify that no incident investigation, alert delivery, or dependent operation still needs the monitor before approving the exact saved destroy plan.
+Treat destruction as irreversible for current monitor state, logs and queued failure evidence. Do not assume an enabled PITR setting is a substitute for a reviewed data-retention and recovery decision before deleting tables. Verify that no incident investigation, alert delivery, or dependent operation still needs the monitor before approving the exact saved destroy plan.
 
 ## Full bootstrap teardown
 
 Full bootstrap teardown is exceptional. It can remove the state infrastructure and the ability to manage the monitor through the existing workflow.
+
+The deployed bootstrap-owned SNS key has its own Terraform `prevent_destroy` guard. The historical bucket teardown steps below are **not sufficient authorization or a procedure for key deletion**. Before any full teardown, separately inventory encrypted-message dependencies, key ownership, pending investigations and remaining cost, and review the exact key lifecycle plan. Do not remove its guard, disable it or schedule deletion as an incidental cleanup step.
 
 1. Destroy runtime resources first through the reviewed destroy workflow.
 2. Migrate bootstrap state back to local storage using a reviewed, exact backend configuration.
