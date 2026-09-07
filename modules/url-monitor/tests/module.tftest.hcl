@@ -56,7 +56,7 @@ run "dashboard_uses_scoped_existing_metrics_and_preserves_paused_schedule" {
   assert {
     condition = alltrue(flatten([
       for widget in jsondecode(aws_cloudwatch_dashboard.operations[0].dashboard_body).widgets :
-      [for metric in widget.properties.metrics : contains(["AWS/Lambda", "AWS/SNS", "AWS/DynamoDB"], metric[0])]
+      [for metric in widget.properties.metrics : contains(["AWS/Lambda", "AWS/SNS", "AWS/DynamoDB", "AWS/Scheduler", "AWS/SQS"], metric[0])]
       if widget.type == "metric"
     ]))
     error_message = "Every metric must use an existing AWS service namespace; no custom metrics or expressions."

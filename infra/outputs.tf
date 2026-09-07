@@ -37,3 +37,13 @@ output "dashboard_url" {
   description = "AWS console link for the operations dashboard; requires AWS sign-in."
   value       = module.url_monitor.dashboard_url
 }
+
+output "scheduler_dlq_url" {
+  description = "URL of the queue holding Scheduler delivery failures."
+  value       = module.url_monitor.scheduler_dlq_url
+}
+
+output "lambda_dlq_url" {
+  description = "URL of the queue holding Lambda execution failures."
+  value       = module.url_monitor.lambda_dlq_url
+}

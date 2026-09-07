@@ -37,3 +37,13 @@ output "dashboard_url" {
   description = "Authenticated AWS console dashboard link, or null when disabled."
   value       = var.dashboard_enabled ? "https://${data.aws_region.current.region}.console.aws.amazon.com/cloudwatch/home?region=${data.aws_region.current.region}#dashboards/dashboard/${aws_cloudwatch_dashboard.operations[0].dashboard_name}" : null
 }
+
+output "scheduler_dlq_url" {
+  description = "URL of the queue holding Scheduler delivery failures."
+  value       = aws_sqs_queue.scheduler_dlq.url
+}
+
+output "lambda_dlq_url" {
+  description = "URL of the queue holding Lambda execution failures."
+  value       = aws_sqs_queue.lambda_dlq.url
+}

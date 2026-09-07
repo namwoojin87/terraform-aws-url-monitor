@@ -87,6 +87,68 @@ resource "aws_cloudwatch_dashboard" "operations" {
           liveData = false
         }
       }
+      ], [
+      {
+        type   = "metric"
+        x      = 0
+        y      = 15
+        width  = 8
+        height = 6
+        properties = {
+          title = "Scheduler delivery failures"
+          metrics = [
+            ["AWS/Scheduler", "TargetErrorCount", "ScheduleGroup", aws_scheduler_schedule_group.monitor.name],
+            ["AWS/Scheduler", "InvocationDroppedCount", "ScheduleGroup", aws_scheduler_schedule_group.monitor.name],
+            ["AWS/Scheduler", "InvocationsSentToDeadLetterCount", "ScheduleGroup", aws_scheduler_schedule_group.monitor.name],
+            ["AWS/Scheduler", "InvocationsFailedToBeSentToDeadLetterCount", "ScheduleGroup", aws_scheduler_schedule_group.monitor.name],
+          ]
+          stat     = "Sum"
+          period   = 300
+          region   = data.aws_region.current.region
+          view     = "timeSeries"
+          stacked  = false
+          liveData = false
+        }
+      },
+      {
+        type   = "metric"
+        x      = 8
+        y      = 15
+        width  = 8
+        height = 6
+        properties = {
+          title = "Lambda execution failures"
+          metrics = [
+            ["AWS/Lambda", "DeadLetterErrors", "FunctionName", aws_lambda_function.checker.function_name],
+          ]
+          stat     = "Sum"
+          period   = 300
+          region   = data.aws_region.current.region
+          view     = "timeSeries"
+          stacked  = false
+          liveData = false
+        }
+      },
+      {
+        type   = "metric"
+        x      = 16
+        y      = 15
+        width  = 8
+        height = 6
+        properties = {
+          title = "Failure queue depth"
+          metrics = [
+            ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", aws_sqs_queue.scheduler_dlq.name],
+            ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", aws_sqs_queue.lambda_dlq.name],
+          ]
+          stat     = "Maximum"
+          period   = 300
+          region   = data.aws_region.current.region
+          view     = "timeSeries"
+          stacked  = false
+          liveData = false
+        }
+      }
     ])
   })
 }

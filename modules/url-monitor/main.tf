@@ -24,6 +24,10 @@ resource "aws_dynamodb_table" "state" {
     enabled        = true
   }
 
+  point_in_time_recovery {
+    enabled = true
+  }
+
   tags = var.tags
 }
 
@@ -48,6 +52,10 @@ resource "aws_dynamodb_table" "history" {
     enabled        = true
   }
 
+  point_in_time_recovery {
+    enabled = true
+  }
+
   tags = var.tags
 }
 
@@ -66,6 +74,14 @@ resource "aws_lambda_function" "checker" {
   source_code_hash = var.lambda_package.source_code_hash
   timeout          = 30
   memory_size      = 128
+
+  dead_letter_config {
+    target_arn = aws_sqs_queue.lambda_dlq.arn
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -89,7 +105,7 @@ resource "aws_scheduler_schedule" "monitor" {
   group_name = aws_scheduler_schedule_group.monitor.name
   state      = var.schedule_enabled ? "ENABLED" : "DISABLED"
 
-  depends_on = [aws_iam_role_policy.scheduler]
+  depends_on = [aws_iam_role_policy.scheduler, aws_lambda_function_event_invoke_config.checker]
 
   flexible_time_window {
     mode = "OFF"
@@ -112,6 +128,10 @@ resource "aws_scheduler_schedule" "monitor" {
         }
       }
     })
+
+    dead_letter_config {
+      arn = aws_sqs_queue.scheduler_dlq.arn
+    }
 
     retry_policy {
       maximum_event_age_in_seconds = 300
