@@ -4,6 +4,8 @@
 
 This runbook describes infrastructure code awaiting deployment. Its queues, recovery settings, and tracing must not be treated as live until an approved Terraform deployment is complete.
 
+The supporting bootstrap permissions and SNS key were [applied separately](bootstrap-hardening-apply-2026-09-07.md) on 2026-09-07. That does not deploy these runtime recovery features or authorize a replay or restore drill.
+
 ## Failure evidence
 
 Read queue attributes before taking any other queue action. Receiving a message changes its visibility, so coordinate with the incident owner before receiving one. Never automatically replay, purge, or delete messages.

@@ -4,13 +4,15 @@
 
 ## 상태 표기
 
-**2026-09-07 검증 기준:** 기존 URL 검사, 현재 상태·이력 저장, SNS 알림, CloudWatch 로그·오류 경보, 승인 배포, 주간 드리프트 점검은 이전 실행 기록의 대상이다. 마지막 AWS 조회에서 Scheduler는 `DISABLED`, 대시보드는 미생성이었다. 과거 대시보드 전용 IAM 변경만 적용됐고, 신규 PITR·큐·추적·SNS 키와 추가 IAM은 **로컬 코드·mock 검증 완료, AWS 미적용**이다. 새 전체 검증은 Python **71개**, Terraform module **11개**·bootstrap **9개** 통과, Checkov **195 pass / 16 fail / 0 skip / 0 parsing errors**로 gate **FAIL**이다. [최신 보완 검증](hardening-verification-2026-09-07.md)에 정확한 커밋·시각·잔여 항목을 기록한다. PR #8의 이전 CI 성공과 154 pass / 18 fail 보안 결과, 기존 AWS 검사기 HTTP 200 / UP 및 DB 저장 결과는 [이전 직접 실행 기록](final-verification.md)의 별도 증빙이며 새 구성의 실환경 성공을 뜻하지 않는다.
+**2026-09-07 18:04 KST 검증 기준:** SNS 전용 bootstrap 키·별칭, 추가 배포 IAM, 상태 저장소 정리 규칙은 별도 승인을 받아 **AWS 적용·검증 완료**했다. 결과는 추가 2개·수정 2개·삭제 0개이고, 후속 bootstrap 계획은 변경 없음이었다. Scheduler는 설정 변경 없이 `DISABLED`이다. 대시보드·PITR·실패 큐·추적·SNS 토픽 암호화와 런타임 발행자 권한은 아직 미배포다. [bootstrap 적용 기록](bootstrap-hardening-apply-2026-09-07.md)이 새 키와 권한의 실환경 증빙이다.
+
+기존 URL 검사, 현재 상태·이력 저장, SNS 알림, 로그·경보·승인 배포·주간 드리프트 점검과 대시보드 미생성 조회는 이전 기록의 대상이다. 앞선 전체 코드 검증은 Python **71개**, Terraform module **11개**·bootstrap **9개** 통과, Checkov **195 pass / 16 fail / 0 skip / 0 parsing errors**로 gate **FAIL**이었다. [보완 코드 검증](hardening-verification-2026-09-07.md)과 [이전 직접 실행 기록](final-verification.md)은 각 시점의 별도 증빙이며 새 런타임 구성의 실환경 성공을 뜻하지 않는다. 이번 bootstrap 적용에 보안 검사 예외나 운영 배포는 포함되지 않았다.
 
 신규 lab의 직접 수동 5회 시연은 상태·이력·TTL·운영 설정 보존 검증을 통과했다. 전이 로그는 장애 1회·복구 1회 및 계속 `DOWN`일 때 반복 전이 없음을 보였고, 같은 시각의 SNS 토픽 지표는 발행 2·전달 보고 2·실패 0이었다. **Scheduler 경로 시험이나 특정 이메일의 받은편지함 수신·열람 확인은 아니다.** 상세 실측값과 범위는 [검증 증빙](acceptance-evidence.md)에 있다.
 
 ## 추가 보완의 배포 경계
 
-2026-09-07 승인한 [저비용 보완 범위](superpowers/specs/2026-09-07-low-cost-hardening.md)는 두 테이블의 PITR, 단계별 실패 보관함 2개, Active 추적, 20개 시계열 대시보드, SNS 전용 고객 관리 키 1개이다. 아래 점선 구성은 **AWS 미배포**이며 기존 장애·복구 알림 시연이 암호화된 새 발행 경로의 검증을 대신하지 않는다.
+2026-09-07 승인한 [저비용 보완 범위](superpowers/specs/2026-09-07-low-cost-hardening.md)는 두 테이블의 PITR, 단계별 실패 보관함 2개, Active 추적, 20개 시계열 대시보드, SNS 전용 고객 관리 키 1개이다. bootstrap 키 자체와 지원 IAM은 적용됐지만 아래 점선의 **런타임 연결·기능은 미배포**다. 기존 장애·복구 알림 시연이 암호화된 새 발행 경로의 검증을 대신하지 않는다.
 
 ```mermaid
 flowchart LR
@@ -21,14 +23,14 @@ flowchart LR
   PITR["PITR · 적용 대기"] -.-> Tables
   Checker --> Topic["SNS 알림"]
   Alarm["CloudWatch Lambda 오류 경보"] --> Topic
-  Key["bootstrap 소유 KMS 키 1개\n연간 회전 · 삭제 보호 · 미배포"] -. "키 권한 + 토픽 SSE" .-> Topic
+  Key["bootstrap 소유 KMS 키 1개\n적용 완료 · 연간 회전\nTerraform 삭제 방지"] -. "런타임 권한 + 토픽 SSE 적용 대기" .-> Topic
   Checker -. "Active 추적 · 적용 대기" .-> Trace["X-Ray 샘플링"]
   DeliveryDLQ -. "적체 지표" .-> Board["20개 시계열 대시보드\n미배포"]
   ExecutionDLQ -. "적체 지표" .-> Board
   Scheduler -. "전달 / 보관 실패 지표" .-> Board
 ```
 
-Scheduler 전달 재시도(300초 / 1회)와 Lambda 코드 오류 재시도(300초 / 0회)는 서로 다르다. 큐에는 자동 소비자나 자동 재실행을 연결하지 않는다. SNS 키는 runtime과 별도인 bootstrap에서 관리하므로 runtime을 제거하거나 자동 검사를 중지해도 키와 보관 비용이 남는다. Terraform state는 기존 SSE-S3를 유지한다. 실제 변경은 새 bootstrap 계획·권한 검토 후 별도의 saved runtime plan 승인으로 진행한다.
+Scheduler 전달 재시도(300초 / 1회)와 Lambda 코드 오류 재시도(300초 / 0회)는 서로 다르다. 큐에는 자동 소비자나 자동 재실행을 연결하지 않는다. SNS 키는 runtime과 별도인 bootstrap에서 관리하므로 runtime을 제거하거나 자동 검사를 중지해도 키와 보관 비용이 남는다. Terraform state는 기존 SSE-S3를 유지한다. bootstrap 기반 적용은 완료됐고, 다음 런타임 변경은 잔여 검토와 소스 통합 후 별도 saved runtime plan 승인으로 진행한다.
 
 ## 네 영역의 구성과 경계
 
@@ -126,7 +128,7 @@ CI는 AWS 자격증명 없이 Python 테스트, Terraform 형식·구성 검증,
 
 ### 3. Bootstrap와 상태 접근 경계
 
-bootstrap은 버전 관리·AES256 암호화·퍼블릭 차단이 설정된 S3 상태 저장소와 GitHub OIDC 역할, 예산 알림을 관리한다. runtime을 제거해도 이 기반은 별도로 남도록 루트를 분리했다. 같은 버킷의 `infra/`와 `bootstrap/` 키는 별도 상태이며 GitHub 역할에는 `bootstrap/*` 상태 접근과 허용 범위 밖 목록 조회를 명시적으로 거부한다.
+bootstrap은 버전 관리·AES256 암호화·퍼블릭 차단이 설정된 S3 상태 저장소와 GitHub OIDC 역할, 예산 알림, SNS 전용 고객 관리 키·별칭을 관리한다. runtime을 제거해도 이 기반은 별도로 남도록 루트를 분리했다. 같은 버킷의 `infra/`와 `bootstrap/` 키는 별도 상태이며 GitHub 역할에는 `bootstrap/*` 상태 접근과 허용 범위 밖 목록 조회를 명시적으로 거부한다.
 
 계획 역할의 신뢰 조건은 main, 배포 역할은 production 환경에 연결되고 저장소 이름뿐 아니라 불변 owner/repository ID도 포함한다. 계획 역할은 AWS 관리형 `ReadOnlyAccess`와 runtime 상태·잠금 권한을 사용하므로 모든 역할을 일괄하여 최소 권한이라고 주장하지 않는다. 기존 Lambda 권한은 현재 상태 테이블 Get/Put, 이력 Put, 해당 SNS Publish 및 로그 쓰기이다. 미적용 보완 코드는 자신의 실패 큐 SendMessage, X-Ray 쓰기 2개, 정확한 SNS 키·서비스·토픽 조건의 암호화 사용 권한을 더한다. Scheduler에는 해당 Lambda 호출과 자신의 실패 큐 SendMessage만 둔다. KMS의 계정 IAM 위임은 별도 관리자 신뢰 경계이며 두 발행자만이 키에 접근할 수 있는 독점 허용 목록이라고 주장하지 않는다.
 
