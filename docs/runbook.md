@@ -60,13 +60,15 @@ The dashboard-scoped bootstrap IAM update was approved, applied, and verified on
 
 Deployment order:
 
-1. Review the bootstrap plan with a non-root operator. The new IAM statement grants only `cloudwatch:GetDashboard`, `cloudwatch:PutDashboard`, and `cloudwatch:DeleteDashboards` on the exact `${project_name}-operations` dashboard. Dashboard ARNs are global and have no region component. Obtain explicit authorization before this access change.
-2. Apply only the reviewed bootstrap plan through the existing bootstrap recovery procedure. Do not give the GitHub role general CloudWatch administration or change its OIDC trust.
+1. Review a fresh bootstrap plan with a non-root operator. The historical dashboard statement allows only `cloudwatch:GetDashboard`, `cloudwatch:PutDashboard`, and `cloudwatch:DeleteDashboards` on the exact global `${project_name}-operations` ARN. The hardening extension additionally needs the bootstrap SNS key/alias, exact-key `DescribeKey`, exact-table PITR management, exact-function async configuration management and management of exactly the two failure queues. Review any still-pending earlier bootstrap remediation separately in that plan. Obtain explicit authorization for this new key/IAM change; do not reuse the historical approval.
+2. Apply only that reviewed bootstrap plan through the existing bootstrap recovery procedure. Do not give GitHub key administration, general CloudWatch administration, or new OIDC trust. Runtime planning requires the new SNS key alias to exist first.
 3. Merge the reviewed runtime change once the applicable checks and unresolved security findings have been addressed. Create a **new** protected `Terraform Deploy` plan; do not reuse an earlier saved plan.
-4. Confirm the plan adds one dashboard, retains Scheduler `DISABLED`, and has no unexpected resource changes. Approve that exact plan through `production`.
+4. Confirm the runtime plan includes the approved dashboard, two queues, async failure configuration, two PITR updates, tracing and SNS encryption/publisher policies; retains Scheduler `DISABLED`; and contains no unreviewed resource replacement or deletion. Approve that exact saved plan through `production` only after applicable security decisions are complete.
 5. Open the authenticated console URL from `terraform -chdir=infra output -raw dashboard_url`. A null output means the dashboard is disabled. Confirm the widgets render in Seoul and inspect their actual data window.
 
-The dashboard displays Lambda invocation/error/throttle/runtime metrics, SNS publication/delivery/failure metrics, and read/write capacity metrics for both DynamoDB tables. It uses 13 existing metric series and no custom metrics, Logs Insights queries, or public sharing. The operator needs their own authorized CloudWatch read access; the Lambda execution role receives no new permissions.
+The updated dashboard code displays 20 existing metric series: the previous 13 Lambda/SNS/DynamoDB series plus four Scheduler delivery/failure signals, Lambda `DeadLetterErrors`, and visible-message depth for both failure queues. It uses no custom metrics, Logs Insights queries, or public sharing. The operator needs their own authorized CloudWatch read access; the dashboard itself grants no permissions to the Lambda execution role. The separate reliability extension adds only its required DLQ send and tracing permissions.
+
+This extension is **not deployed**. Its additional bootstrap permissions and the SNS key need a fresh reviewed bootstrap plan; the historical dashboard-only IAM approval is not approval for those changes. Follow the [manual recovery runbook](recovery-runbook.md) and the [approved hardening scope](superpowers/specs/2026-09-07-low-cost-hardening.md). The two queues are evidence storage, not automatic retry workers.
 
 Interpretation limits:
 
@@ -75,6 +77,7 @@ Interpretation limits:
 - Lambda `Duration` measures function runtime, not per-URL response latency or availability. Query DynamoDB history for per-URL measurements.
 - SNS delivery metrics are topic-wide service delivery reports, not proof a recipient read an email.
 - DynamoDB capacity consumption is not a count of stored items.
+- Scheduler delivery errors and Lambda execution errors describe different stages. A zero visible-message count does not prove successful end-to-end delivery; inspect the failure-to-send and `DeadLetterErrors` signals as well.
 
 CloudWatch currently includes three custom dashboards with up to 50 metrics each in its free allowance. Check all dashboards in the account before applying; the allowance is shared, not reserved for this project. No zero-cost guarantee is made for AWS usage or optional future features. See [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/) and [dashboard resource permissions](https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudwatch.html).
 
@@ -95,7 +98,7 @@ py -3.12 -m venv .superpowers/checkov-venv
 
 The `.superpowers/` directory is ignored by Git; do not force-add the environment or reports. Checkov runs offline without downloading Terraform modules or contacting an optional platform; the dependency installation itself requires network access.
 
-The initial repository scan reported 152 passed, 20 failed, and 0 skipped checks. After two local bootstrap remediations, the latest scan remains **not passing**: 154 passed, 18 failed, and 0 skipped checks. The seven-day incomplete-upload abort setting and removal of global alarm-read permission are code changes only; they require a new reviewed bootstrap plan and explicit live-change approval. The already applied dashboard-only IAM record does not approve these later changes. Consult [the security review](security-review.md) before proceeding. Some remaining findings require meaningful cost, retention, encryption-key, or architecture decisions. Do not add a blanket skip, soft-fail mode, broad IAM permissions, or paid infrastructure to obtain a green badge. Adding the workflow does not by itself configure a required branch-protection check.
+The initial repository scan reported 152 passed, 20 failed and 0 skipped checks; two earlier bootstrap remediations reduced the findings to 18. The fresh hardening scan remains **not passing**: 37 resources, 195 passed, 16 failed, 0 skipped and 0 parsing errors. Five old findings are resolved in code, while the new KMS account-delegation policy adds three findings requiring contextual owner review. All hardening changes and the two earlier bootstrap remediations still require fresh plans and explicit live-change approval. The already applied dashboard-only IAM record does not approve them. Consult [the security review](security-review.md) and [dated hardening verification](hardening-verification-2026-09-07.md). Do not add a blanket skip, soft-fail mode, meaningless policy condition, broad IAM permission, or paid infrastructure merely to obtain a green badge. Adding the workflow does not by itself configure a required branch-protection check.
 
 Review raw artifacts before sharing: scans can contain source snippets, resource identifiers, and local paths. Keep credentials, personal addresses, and backend configuration out of tracked Terraform so CI artifacts do not expose them.
 
@@ -179,13 +182,15 @@ The module intentionally does not set a per-function reserved concurrency value.
 
 ## Destroy runtime resources
 
-Use `Terraform Deploy` with operation `destroy`, review the saved destroy plan, and approve the protected `production` job. This removes runtime monitor resources while retaining the bootstrap state storage, budget notification, and GitHub OIDC roles.
+Use `Terraform Deploy` with operation `destroy`, review the saved destroy plan, and approve the protected `production` job. This removes runtime monitor resources while retaining the bootstrap state storage, budget notification, GitHub OIDC roles, and any subsequently deployed bootstrap-owned SNS key. Destroying the runtime or pausing the schedule does not remove that key or its storage charges.
 
-Treat destruction as irreversible for current monitor state and logs. Verify that no incident investigation, alert delivery, or dependent operation still needs the monitor before approving the exact saved destroy plan.
+Treat destruction as irreversible for current monitor state, logs and queued failure evidence. Do not assume an enabled PITR setting is a substitute for a reviewed data-retention and recovery decision before deleting tables. Verify that no incident investigation, alert delivery, or dependent operation still needs the monitor before approving the exact saved destroy plan.
 
 ## Full bootstrap teardown
 
 Full bootstrap teardown is exceptional. It can remove the state infrastructure and the ability to manage the monitor through the existing workflow.
+
+The approved hardening design adds a bootstrap-owned SNS key with its own `prevent_destroy` guard. The historical bucket teardown steps below are **not sufficient authorization or a procedure for key deletion**. Before any full teardown after that key is deployed, separately inventory encrypted-message dependencies, key ownership, pending investigations and remaining cost, and review the exact key lifecycle plan. Do not remove its guard, disable it or schedule deletion as an incidental cleanup step.
 
 1. Destroy runtime resources first through the reviewed destroy workflow.
 2. Migrate bootstrap state back to local storage using a reviewed, exact backend configuration.

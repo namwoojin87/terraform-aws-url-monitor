@@ -4,9 +4,31 @@
 
 ## 상태 표기
 
-**2026-09-07 검증 기준:** URL 검사, 현재 상태·이력 저장, SNS 장애·복구 알림, CloudWatch 로그·오류 경보, 승인 배포, 주간 드리프트 점검이 구성되어 있다. URL Scheduler는 `DISABLED`이며 마지막 확인된 드리프트 실행은 `CLEAN`이다. 신규 CloudWatch 대시보드는 **코드·mock 검증 및 배포 IAM 적용 완료, runtime 적용 대기·미배포**이고 Terraform mock 검증은 module 5개·bootstrap 5개 통과했다. 마지막 IAM 검증에서 대시보드는 아직 존재하지 않았다. 초안 PR #8의 최초 실제 CI는 성공했지만 Checkov는 **154 pass / 18 fail / 0 skip**으로 **FAIL**이며 실패 증빙 업로드를 확인했다. 최종 로컬 재검사도 같은 결과다. Python **70개(기존 59개·실제 Checkov fixture 5개·보고서 오류 회귀 6개)가 모두 통과**했다. 미완료 업로드 정리와 전역 알람 조회 권한 축소 2건은 PR에 게시했으며 AWS 미적용이다. 기존 AWS 검사기 수동 1회 실행도 HTTP 200 / UP 및 DB 저장을 확인했다. [직접 실행 기록](final-verification.md)을 참조한다.
+**2026-09-07 검증 기준:** 기존 URL 검사, 현재 상태·이력 저장, SNS 알림, CloudWatch 로그·오류 경보, 승인 배포, 주간 드리프트 점검은 이전 실행 기록의 대상이다. 마지막 AWS 조회에서 Scheduler는 `DISABLED`, 대시보드는 미생성이었다. 과거 대시보드 전용 IAM 변경만 적용됐고, 신규 PITR·큐·추적·SNS 키와 추가 IAM은 **로컬 코드·mock 검증 완료, AWS 미적용**이다. 새 전체 검증은 Python **71개**, Terraform module **11개**·bootstrap **9개** 통과, Checkov **195 pass / 16 fail / 0 skip / 0 parsing errors**로 gate **FAIL**이다. [최신 보완 검증](hardening-verification-2026-09-07.md)에 정확한 커밋·시각·잔여 항목을 기록한다. PR #8의 이전 CI 성공과 154 pass / 18 fail 보안 결과, 기존 AWS 검사기 HTTP 200 / UP 및 DB 저장 결과는 [이전 직접 실행 기록](final-verification.md)의 별도 증빙이며 새 구성의 실환경 성공을 뜻하지 않는다.
 
 신규 lab의 직접 수동 5회 시연은 상태·이력·TTL·운영 설정 보존 검증을 통과했다. 전이 로그는 장애 1회·복구 1회 및 계속 `DOWN`일 때 반복 전이 없음을 보였고, 같은 시각의 SNS 토픽 지표는 발행 2·전달 보고 2·실패 0이었다. **Scheduler 경로 시험이나 특정 이메일의 받은편지함 수신·열람 확인은 아니다.** 상세 실측값과 범위는 [검증 증빙](acceptance-evidence.md)에 있다.
+
+## 추가 보완의 배포 경계
+
+2026-09-07 승인한 [저비용 보완 범위](superpowers/specs/2026-09-07-low-cost-hardening.md)는 두 테이블의 PITR, 단계별 실패 보관함 2개, Active 추적, 20개 시계열 대시보드, SNS 전용 고객 관리 키 1개이다. 아래 점선 구성은 **AWS 미배포**이며 기존 장애·복구 알림 시연이 암호화된 새 발행 경로의 검증을 대신하지 않는다.
+
+```mermaid
+flowchart LR
+  Scheduler["Scheduler · 현재 중지"] -->|"비동기 호출"| Checker["Lambda URL 검사"]
+  Scheduler -. "전달 실패 · 적용 대기" .-> DeliveryDLQ["Scheduler SQS DLQ\nSSE-SQS · 14일"]
+  Checker -. "실행 실패 · 적용 대기" .-> ExecutionDLQ["Lambda SQS DLQ\nSSE-SQS · 14일"]
+  Checker --> Tables["DynamoDB 현재 상태 / 이력"]
+  PITR["PITR · 적용 대기"] -.-> Tables
+  Checker --> Topic["SNS 알림"]
+  Alarm["CloudWatch Lambda 오류 경보"] --> Topic
+  Key["bootstrap 소유 KMS 키 1개\n연간 회전 · 삭제 보호 · 미배포"] -. "키 권한 + 토픽 SSE" .-> Topic
+  Checker -. "Active 추적 · 적용 대기" .-> Trace["X-Ray 샘플링"]
+  DeliveryDLQ -. "적체 지표" .-> Board["20개 시계열 대시보드\n미배포"]
+  ExecutionDLQ -. "적체 지표" .-> Board
+  Scheduler -. "전달 / 보관 실패 지표" .-> Board
+```
+
+Scheduler 전달 재시도(300초 / 1회)와 Lambda 코드 오류 재시도(300초 / 0회)는 서로 다르다. 큐에는 자동 소비자나 자동 재실행을 연결하지 않는다. SNS 키는 runtime과 별도인 bootstrap에서 관리하므로 runtime을 제거하거나 자동 검사를 중지해도 키와 보관 비용이 남는다. Terraform state는 기존 SSE-S3를 유지한다. 실제 변경은 새 bootstrap 계획·권한 검토 후 별도의 saved runtime plan 승인으로 진행한다.
 
 ## 네 영역의 구성과 경계
 
@@ -31,7 +53,7 @@ flowchart TB
   subgraph delivery["2. GitHub 검증과 승인 배포"]
     PR["Pull Request"]
     CI["Python 테스트 · Terraform 검증\nmock 테스트 · TFLint"]
-    Checkov["Checkov 정적 보안 검사\n로컬·GitHub gate FAIL · 18건 미해결"]
+    Checkov["Checkov 정적 보안 검사\n최신 로컬 gate FAIL · 16건 미해결"]
     Main["main"]
     Plan["Terraform saved plan 생성\n배포 workflow의 plan 작업"]
     Artifact["age 암호화 plan 바이너리\n검토용 요약 · Lambda 패키지"]
@@ -94,7 +116,7 @@ flowchart TB
 
 ### 2. CI/CD: 검증과 적용 권한 분리
 
-기존 CI는 AWS 자격증명 없이 Python 테스트, Terraform 형식·구성 검증, mock provider 테스트와 TFLint를 실행한다. Linux에서는 runtime의 provider lockfile을 읽기 전용으로 초기화한 뒤 validate하여 플랫폼 해시 호환성도 검사한다. 신규 구성의 로컬 Terraform mock 검증은 module 5개·bootstrap 5개 통과했지만 AWS 배포나 실환경 권한 검증은 아니다. PR #8의 최초 실제 CI 성공과 보안 workflow의 실패 증빙 업로드를 확인했다. 로컬 및 해당 GitHub 전체 스캔은 154 pass / 18 fail / 0 skip, 파싱 오류 0으로 gate FAIL이다. 보안 Green을 주장하지 않으며 미해결 항목 검토가 남아 있다. 원격 실행별 commit과 출처는 [검증 기록](final-verification.md)에 구분했다.
+CI는 AWS 자격증명 없이 Python 테스트, Terraform 형식·구성 검증, mock provider 테스트와 TFLint를 실행한다. Linux에서는 runtime의 provider lockfile을 읽기 전용으로 초기화한 뒤 validate하여 플랫폼 해시 호환성도 검사한다. 새 구성의 로컬 mock 검증은 module 11개·bootstrap 9개 통과했지만 AWS 배포나 실환경 권한 검증은 아니다. 최신 로컬 Checkov 결과는 37개 리소스, 195 pass / 16 fail / 0 skip, 파싱 오류 0이다. SNS·PITR·DLQ·추적의 기존 지적 5개를 해소했지만 KMS 계정 IAM 위임 문장에 일반 IAM 검사 지적 3개가 추가됐다. 어떤 검사도 숨기거나 예외 승인하지 않았다. 새 코드의 [보완 검증](hardening-verification-2026-09-07.md)과 과거 원격 실행별 [증빙](final-verification.md)을 구분해 읽는다.
 
 배포는 main에서 수동으로 시작한다. OIDC 계획 역할이 saved plan을 만들고 바이너리를 age로 암호화한다. 검토용 텍스트 요약과 Lambda 패키지는 별도 파일이므로 **모든 artifact가 암호화되었다고 표현하지 않는다.** production 보호 환경의 승인 후 별도 배포 역할이 같은 saved plan을 적용한다. GitHub Actions용 장기 AWS 액세스 키를 사용하는 설계가 아니다.
 
@@ -106,7 +128,7 @@ flowchart TB
 
 bootstrap은 버전 관리·AES256 암호화·퍼블릭 차단이 설정된 S3 상태 저장소와 GitHub OIDC 역할, 예산 알림을 관리한다. runtime을 제거해도 이 기반은 별도로 남도록 루트를 분리했다. 같은 버킷의 `infra/`와 `bootstrap/` 키는 별도 상태이며 GitHub 역할에는 `bootstrap/*` 상태 접근과 허용 범위 밖 목록 조회를 명시적으로 거부한다.
 
-계획 역할의 신뢰 조건은 main, 배포 역할은 production 환경에 연결되고 저장소 이름뿐 아니라 불변 owner/repository ID도 포함한다. 계획 역할은 AWS 관리형 `ReadOnlyAccess`와 runtime 상태·잠금 권한을 사용하므로 모든 역할을 일괄하여 최소 권한이라고 주장하지 않는다. Lambda는 해당 현재 상태 테이블 Get/Put, 이력 테이블 Put, 해당 SNS Publish 및 로그 쓰기로 제한한다. Scheduler는 해당 Lambda 호출 권한을 가진다.
+계획 역할의 신뢰 조건은 main, 배포 역할은 production 환경에 연결되고 저장소 이름뿐 아니라 불변 owner/repository ID도 포함한다. 계획 역할은 AWS 관리형 `ReadOnlyAccess`와 runtime 상태·잠금 권한을 사용하므로 모든 역할을 일괄하여 최소 권한이라고 주장하지 않는다. 기존 Lambda 권한은 현재 상태 테이블 Get/Put, 이력 Put, 해당 SNS Publish 및 로그 쓰기이다. 미적용 보완 코드는 자신의 실패 큐 SendMessage, X-Ray 쓰기 2개, 정확한 SNS 키·서비스·토픽 조건의 암호화 사용 권한을 더한다. Scheduler에는 해당 Lambda 호출과 자신의 실패 큐 SendMessage만 둔다. KMS의 계정 IAM 위임은 별도 관리자 신뢰 경계이며 두 발행자만이 키에 접근할 수 있는 독점 허용 목록이라고 주장하지 않는다.
 
 bootstrap 변경은 승인된 비루트 운영자 세션에서 별도의 검토한 계획으로 처리한다. CI 검사나 runtime 장애 시연을 이유로 이 접근 경계를 넓히지 않는다.
 
