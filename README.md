@@ -43,6 +43,7 @@ The Lambda handles targets sequentially, records the current state by stable tar
 - Stateful outage suppression and recovery notifications
 - Least-privilege runtime IAM for the Lambda and Scheduler components
 - Short log retention and a monthly cost-budget notification
+- Weekly infrastructure drift checks with a sanitized GitHub Actions summary
 
 ## Setup
 
@@ -73,6 +74,8 @@ Do not commit an alert address, backend configuration values, state, plan files,
 The committed demonstration target is `https://example.com` under the stable `demo` key. See [the operating runbook](docs/runbook.md) for target changes, state/log inspection, alert troubleshooting, and teardown procedures.
 
 `infra/monitor.auto.tfvars.json` keeps `schedule_enabled` set to `false`. Scheduled checks remain paused until a reviewed pull request deliberately changes it to `true` and the approved Terraform deployment applies that change.
+
+`Terraform Drift Check` runs every Monday at approximately 09:17 Korea time and can be started manually from `main`. It compares AWS with Terraform and reports external drift separately from proposed configuration changes. A difference or execution error fails the workflow for visibility; it never applies repairs or enables URL checks. See [the drift-check runbook](docs/runbook.md#weekly-infrastructure-drift-check) for interpretation and notification settings.
 
 ## Cost controls
 

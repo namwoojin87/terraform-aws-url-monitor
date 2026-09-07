@@ -6,6 +6,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = (
     REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml",
     REPOSITORY_ROOT / ".github" / "workflows" / "deploy.yml",
+    REPOSITORY_ROOT / ".github" / "workflows" / "drift.yml",
 )
 
 

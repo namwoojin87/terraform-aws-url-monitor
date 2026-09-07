@@ -52,6 +52,30 @@ aws sns list-subscriptions-by-topic --region ap-northeast-2 --topic-arn $topicAr
 
 The subscription must not remain `PendingConfirmation`. CloudWatch/SNS metrics should reflect one publish for a normal outage transition and one additional publish for its recovery.
 
+## Weekly infrastructure drift check
+
+The `Terraform Drift Check` workflow runs on `main` every Monday at 00:17 UTC (09:17 Asia/Seoul). To run it immediately, open GitHub Actions, select **Terraform Drift Check**, choose **Run workflow**, and keep branch **main**. Other branches are skipped because the existing OIDC plan-role trust permits only `main`.
+
+The workflow uses the existing plan role and live `infra/terraform.tfstate` backend with locking. It runs `terraform plan -json -detailed-exitcode` without saving a plan or applying anything. It does not inspect the separately protected bootstrap configuration, untracked AWS resources, DynamoDB item contents, or endpoint availability. The workflow leaves the URL-check Scheduler unchanged; its committed desired state is disabled, and detected differences are reported.
+
+Read the job summary as follows:
+
+| Result | Meaning | Next action |
+| --- | --- | --- |
+| CLEAN / successful run | No observed drift or pending configuration changes | None |
+| CHANGES DETECTED / failed run | External changes, proposed configuration changes, or output differences need review | Compare with recent commits and deployments; decide whether to keep the code or update it, then use the protected deployment workflow |
+| ERROR / failed run | Planning could not complete; infrastructure health is unknown | Check the failed setup step, credentials, required inputs, or state locking and rerun |
+
+**Observed external changes** come from Terraform refresh events. **Proposed configuration changes** are the reconciliation plan and can include committed but undeployed changes, not just manual AWS edits. Data-source reads are omitted from resource-change lists. Output-only or otherwise unclassified nonempty plans still require review, even without listed resource changes. A run during an active deployment can observe temporary differences or encounter a state lock; let deployment finish and rerun. Never disable locking to make a check pass.
+
+The planner captures raw JSON and diagnostics in memory, publishing only resource addresses and action categories. Attribute values, Terraform outputs, raw diagnostics, and plaintext plans are not uploaded as artifacts or included in the report. Keep secrets out of resource names and instance keys as these form resource addresses. For detailed diagnosis, use the existing protected deployment plan and review it before any apply. Local Python imports under `lambda/` can leave bytecode that changes the packaged Lambda hash; use a clean checkout when checking drift locally.
+
+GitHub Actions email/web delivery depends on the account's notification preferences. Enable **Actions** notifications and choose **failed workflows only** if desired; this feature does not alter notification settings or create issues. Scheduled notifications are associated with the workflow's schedule actor. GitHub may delay scheduled runs and disables public-repository schedules after 60 days without repository activity; check the Actions page when resuming a dormant project. See [GitHub schedule behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) and [workflow notifications](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs).
+
+The planner has a ten-minute timeout, requests a graceful interrupt and waits up to 30 seconds for lock cleanup before forced termination. A forced runner shutdown may still leave a lock: establish that no operation owns it before considering a manual unlock; this workflow never force-unlocks state.
+
+The check performs AWS reads plus Terraform backend locking and consumes a short GitHub runner job. It creates no AWS runtime services. Terraform behavior is documented in the [plan command reference](https://developer.hashicorp.com/terraform/cli/commands/plan) and [machine-readable UI reference](https://developer.hashicorp.com/terraform/internals/machine-readable-ui).
+
 ## Change a target
 
 1. Edit `infra/monitor.auto.tfvars.json` while preserving the stable map key (for example, `demo`).
