@@ -10,6 +10,12 @@ variable "alert_email" {
   sensitive   = true
 }
 
+variable "schedule_enabled" {
+  description = "Whether the production URL check schedule is enabled."
+  type        = bool
+  default     = false
+}
+
 variable "monitor_targets" {
   description = "Public endpoints passed to the monitor module."
   type = map(object({

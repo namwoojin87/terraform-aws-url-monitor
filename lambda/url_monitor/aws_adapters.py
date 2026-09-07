@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict
 
-from url_monitor.domain import StoredState
+from url_monitor.domain import CheckResult, StoredState
 
 
 class DynamoStateRepository:
@@ -24,6 +24,31 @@ class DynamoStateRepository:
 
     def put(self, monitor_id: str, state: StoredState) -> None:
         item = {"monitor_id": monitor_id, **asdict(state)}
+        self.table.put_item(Item={key: value for key, value in item.items() if value is not None})
+
+
+class DynamoHistoryRepository:
+    def __init__(self, table):
+        self.table = table
+
+    def put(
+        self,
+        monitor_id: str,
+        checked_at: str,
+        result: CheckResult,
+        state: StoredState,
+        expires_at: int,
+    ) -> None:
+        item = {
+            "monitor_id": monitor_id,
+            "checked_at": checked_at,
+            "healthy": result.healthy,
+            "state": state.status,
+            "status_code": result.status_code,
+            "response_ms": result.response_ms,
+            "error_category": result.error_category,
+            "expires_at": expires_at,
+        }
         self.table.put_item(Item={key: value for key, value in item.items() if value is not None})
 
 

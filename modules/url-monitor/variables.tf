@@ -54,6 +54,12 @@ variable "schedule_expression" {
   default     = "rate(5 minutes)"
 }
 
+variable "schedule_enabled" {
+  description = "Whether scheduled URL checks are enabled."
+  type        = bool
+  default     = true
+}
+
 variable "failure_threshold" {
   description = "Consecutive failures required before outage notification."
   type        = number

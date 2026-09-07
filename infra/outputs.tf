@@ -8,6 +8,11 @@ output "state_table_name" {
   value       = module.url_monitor.state_table_name
 }
 
+output "history_table_name" {
+  description = "DynamoDB table holding seven-day check history."
+  value       = module.url_monitor.history_table_name
+}
+
 output "sns_topic_arn" {
   description = "SNS topic requiring email confirmation."
   value       = module.url_monitor.sns_topic_arn

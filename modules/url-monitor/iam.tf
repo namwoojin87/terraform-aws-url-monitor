@@ -26,6 +26,12 @@ data "aws_iam_policy_document" "lambda" {
     resources = [aws_dynamodb_table.state.arn]
   }
   statement {
+    sid = "WriteCheckHistory"
+
+    actions   = ["dynamodb:PutItem"]
+    resources = [aws_dynamodb_table.history.arn]
+  }
+  statement {
     actions   = ["sns:Publish"]
     resources = [aws_sns_topic.alerts.arn]
   }

@@ -23,6 +23,15 @@ The valid statuses are:
 - `PENDING_DOWN` — one failure has been recorded; no outage notification is sent yet.
 - `DOWN` — the configured failure threshold was reached; one outage notification has been sent for the transition.
 
+### Inspect recent check history
+
+Read the history table name and query only the stable monitor partition. This returns at most 20 newest records and avoids a table scan.
+
+    $historyTable = terraform -chdir=infra output -raw history_table_name
+    aws dynamodb query --region ap-northeast-2 --table-name $historyTable --key-condition-expression "monitor_id = :monitor" --expression-attribute-values '{":monitor":{"S":"demo"}}' --no-scan-index-forward --limit 20
+
+History expiration uses DynamoDB TTL. Items become eligible for deletion after seven days, but deletion is asynchronous.
+
 ### Inspect recent execution
 
 ```powershell
@@ -82,6 +91,10 @@ For an incident demonstration, `https://monitor-demo.invalid` is a safe reserved
 ### Lambda concurrency configuration fails
 
 The module intentionally does not set a per-function reserved concurrency value. It uses account unreserved concurrency because low-quota accounts can reject small per-function reservations. Keep the 30-second timeout and five-minute schedule unchanged unless an approved design change accounts for operational overlap.
+
+## Enable or pause scheduled checks
+
+`infra/monitor.auto.tfvars.json` is the source of truth. Change `schedule_enabled` through a pull request, require CI to pass, merge to `main`, and run the approved Terraform deployment. Use `true` to enable five-minute checks and `false` to pause them. Do not toggle the Scheduler only in the AWS console because the next Terraform deployment will restore the committed value.
 
 ## Destroy runtime resources
 

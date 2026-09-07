@@ -39,6 +39,30 @@ override_resource {
   }
 }
 
+override_resource {
+  target          = aws_dynamodb_table.history
+  override_during = plan
+  values = {
+    arn = "arn:aws:dynamodb:us-east-1:123456789012:table/url-monitor-history"
+  }
+}
+
+override_resource {
+  target          = aws_dynamodb_table.state
+  override_during = plan
+  values = {
+    arn = "arn:aws:dynamodb:us-east-1:123456789012:table/url-monitor-state"
+  }
+}
+
+override_resource {
+  target          = aws_cloudwatch_log_group.checker
+  override_during = plan
+  values = {
+    arn = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/url-monitor-checker"
+  }
+}
+
 variables {
   project_name = "url-monitor"
   alert_email  = "alerts@example.com"
@@ -61,6 +85,16 @@ run "plans_low_cost_runtime" {
   assert {
     condition     = aws_dynamodb_table.state.billing_mode == "PAY_PER_REQUEST"
     error_message = "DynamoDB must use on-demand capacity."
+  }
+
+  assert {
+    condition     = aws_dynamodb_table.history.billing_mode == "PAY_PER_REQUEST" && aws_dynamodb_table.history.hash_key == "monitor_id" && aws_dynamodb_table.history.range_key == "checked_at"
+    error_message = "History must use on-demand capacity with monitor and timestamp keys."
+  }
+
+  assert {
+    condition     = aws_dynamodb_table.history.ttl[0].attribute_name == "expires_at" && aws_dynamodb_table.history.ttl[0].enabled
+    error_message = "History must expire through the enabled expires_at TTL."
   }
 
   assert {
@@ -113,6 +147,29 @@ run "wires_runtime_delivery_and_outputs" {
   }
 
   assert {
+    condition     = aws_lambda_function.checker.environment[0].variables.HISTORY_TABLE_NAME == aws_dynamodb_table.history.name
+    error_message = "Lambda must receive the history table name."
+  }
+
+  assert {
+    condition     = jsondecode(aws_scheduler_schedule.monitor.target[0].input).history_ttl_days == 7
+    error_message = "Scheduler payload must retain history for seven days."
+  }
+
+  assert {
+    condition     = aws_scheduler_schedule.monitor.state == "ENABLED"
+    error_message = "Reusable module schedule defaults to enabled."
+  }
+
+  assert {
+    condition = length([
+      for statement in data.aws_iam_policy_document.lambda.statement : statement
+      if contains(statement.actions, "dynamodb:PutItem") && contains(statement.resources, aws_dynamodb_table.history.arn)
+    ]) == 1
+    error_message = "Lambda must receive PutItem access to the history table."
+  }
+
+  assert {
     condition     = data.aws_caller_identity.current.account_id == "123456789012"
     error_message = "Scheduler trust policy must derive its source account from the AWS provider."
   }
@@ -120,6 +177,11 @@ run "wires_runtime_delivery_and_outputs" {
   assert {
     condition     = output.lambda_function_name == "url-monitor-checker" && output.state_table_name == "url-monitor-state" && output.sns_topic_arn == "arn:aws:sns:us-east-1:123456789012:url-monitor-alerts" && output.schedule_name == "url-monitor-checks" && output.log_group_name == "/aws/lambda/url-monitor-checker"
     error_message = "Module outputs must expose the Lambda, state table, topic, schedule, and log group."
+  }
+
+  assert {
+    condition     = output.history_table_name == "url-monitor-history"
+    error_message = "Module must expose the history table name."
   }
 }
 
