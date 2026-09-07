@@ -107,6 +107,7 @@ data "aws_iam_policy_document" "deploy" {
     actions = [
       "lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction",
       "lambda:GetFunctionCodeSigningConfig", "lambda:GetPolicy", "lambda:ListTags",
+      "lambda:ListVersionsByFunction",
       "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency",
       "lambda:TagResource", "lambda:UntagResource", "lambda:UpdateFunctionCode",
       "lambda:UpdateFunctionConfiguration"

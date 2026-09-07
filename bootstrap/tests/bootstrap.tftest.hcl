@@ -122,6 +122,18 @@ run "keeps_bootstrap_security_contract" {
   }
 
   assert {
+    condition = anytrue([
+      for statement in data.aws_iam_policy_document.deploy.statement :
+      contains(statement.actions, "lambda:ListVersionsByFunction")
+      ]) && alltrue([
+      for statement in data.aws_iam_policy_document.deploy.statement :
+      !contains(statement.actions, "lambda:ListVersionsByFunction") ||
+      toset(statement.resources) == toset(["arn:aws:lambda:ap-northeast-2:123456789012:function:url-monitor-*"])
+    ])
+    error_message = "Deploy must read Lambda versions after updates, restricted to project functions."
+  }
+
+  assert {
     condition     = aws_iam_role_policy_attachment.plan_read_only.policy_arn == "arn:aws:iam::aws:policy/ReadOnlyAccess" && aws_iam_role_policy_attachment.plan_state.policy_arn == aws_iam_policy.state_access.arn && aws_iam_role_policy_attachment.deploy_project.policy_arn == aws_iam_policy.deploy.arn && aws_iam_role_policy_attachment.deploy_state.policy_arn == aws_iam_policy.state_access.arn
     error_message = "Plan and deploy roles must retain their required policy attachments."
   }
